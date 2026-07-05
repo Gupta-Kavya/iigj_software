@@ -1,0 +1,27 @@
+{
+    "table": {
+        "top": 71,
+        "left": 9,
+        "width": 202,
+        "height": 119,
+        "display": "block",
+        "fontSize": 7,
+        "rowSpacing": 7,
+        "fontFamily": "Times New Roman",
+        "fontColor": "#363636"
+    },
+    "gemstone": {
+        "top": 87,
+        "left": 243,
+        "width": 46,
+        "height": 46,
+        "display": "block"
+    },
+    "qrcode": {
+        "top": 9.890625,
+        "left": 268.890625,
+        "width": 42,
+        "height": 42,
+        "display": "block"
+    }
+}

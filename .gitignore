@@ -1,0 +1,31 @@
+# Local/user generated data
+pages/user_data/
+pages/assets/st_images/
+pages/assets/vendor/mpdf/tmp/*
+pages/assets/vendor/mpdf/mpdf/tmp/*
+
+# Runtime/cache/log files
+*.log
+*.tmp
+*.cache
+*.lnk
+sess_*
+tmp/
+tmp_sessions/
+pages/report-a4.pdf
+Thumbs.db
+.DS_Store
+
+# Local environment / secrets
+.env
+.env.*
+config.local.php
+*.local.php
+codex_db_inspect.php
+db_backup_*.sql
+db_connect.php
+pages/db_connect.php
+
+# Codex workspace metadata
+.agents/
+.codex/

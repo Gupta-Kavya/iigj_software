@@ -1,0 +1,18 @@
+{
+    "reportNo": "block",
+    "date": "block",
+    "stoneName": "block",
+    "weight": "block",
+    "shapeCut": "block",
+    "dimension": "block",
+    "colour": "none",
+    "opticCharacter": "none",
+    "refractiveIndex": "none",
+    "specificGravity": "none",
+    "magnification": "block",
+    "speciesGroup": "block",
+    "origin": "none",
+    "hardness": "block",
+    "remarks": "block",
+    "issuedTo": "block"
+}

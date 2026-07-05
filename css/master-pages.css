@@ -1,0 +1,250 @@
+.master-page {
+    padding-bottom: 32px;
+}
+
+.master-header {
+    border-bottom: 1px solid #ececf1;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+}
+
+.master-header h1 {
+    border: 0;
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    padding: 0;
+}
+
+.master-header p {
+    color: #737373;
+    font-size: 13px;
+    margin: 0;
+}
+
+.master-card {
+    background: #fff;
+    border: 1px solid #ececf1;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.master-card-head {
+    border-bottom: 1px solid #ececf1;
+    padding: 16px 18px;
+}
+
+.master-card-head h3 {
+    color: #171717;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 4px;
+}
+
+.master-card-head p {
+    color: #737373;
+    font-size: 12px;
+    margin: 0;
+}
+
+.master-card-body {
+    padding: 18px;
+}
+
+.master-field {
+    margin-bottom: 14px;
+}
+
+.master-field label {
+    color: #404040;
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+.master-field .form-control {
+    border-radius: 8px;
+    min-height: 40px;
+}
+
+.master-field-grid {
+    display: grid;
+    gap: 14px 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.master-field-grid.single-col {
+    grid-template-columns: 1fr;
+}
+
+.master-action-bar {
+    align-items: center;
+    border-top: 1px solid #ececf1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+    padding-top: 16px;
+}
+
+.master-table-wrap {
+    overflow-x: auto;
+    padding: 0;
+}
+
+.master-table {
+    margin: 0;
+    width: 100% !important;
+}
+
+.master-table thead th {
+    background: #f7f7f8;
+    border-bottom: 1px solid #ececf1 !important;
+    color: #737373;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 12px 16px !important;
+    text-transform: none;
+}
+
+.master-table tbody td {
+    border-top: 1px solid #ececf1 !important;
+    padding: 10px 16px !important;
+    vertical-align: middle !important;
+}
+
+.master-table .form-control {
+    border-radius: 8px;
+    min-height: 38px;
+}
+
+.master-search-cache {
+    height: 1px;
+    left: -9999px;
+    overflow: hidden;
+    position: absolute;
+    top: auto;
+    white-space: nowrap;
+    width: 1px;
+}
+
+.master-local-search {
+    align-items: flex-end;
+    border-bottom: 1px solid #ececf1;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 14px 16px;
+}
+
+.master-local-search label {
+    color: #737373;
+    font-size: 12px;
+    font-weight: 500;
+    margin: 0;
+}
+
+.master-local-search .form-control {
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    max-width: 260px;
+    min-height: 36px;
+}
+
+.master-filter-empty {
+    color: #737373;
+    font-size: 13px;
+    padding: 18px;
+    text-align: center;
+}
+
+.master-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.master-btn-icon {
+    align-items: center;
+    border-radius: 8px;
+    display: inline-flex;
+    font-size: 13px;
+    gap: 6px;
+    justify-content: center;
+    min-height: 36px;
+    min-width: 36px;
+    padding: 0 12px;
+}
+
+.master-btn-save {
+    background: #171717;
+    border: 1px solid #171717;
+    color: #fff;
+}
+
+.master-btn-save:hover,
+.master-btn-save:focus {
+    background: #404040;
+    border-color: #404040;
+    color: #fff;
+}
+
+.master-btn-delete {
+    background: #fff;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+}
+
+.master-btn-delete:hover,
+.master-btn-delete:focus {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+
+.master-empty {
+    color: #737373;
+    font-size: 13px;
+    padding: 28px 18px;
+    text-align: center;
+}
+
+.master-type-select {
+    margin-bottom: 16px;
+}
+
+/* DataTables theme overrides */
+.master-page .dataTables_wrapper .dataTables_length,
+.master-page .dataTables_wrapper .dataTables_filter,
+.master-page .dataTables_wrapper .dataTables_info,
+.master-page .dataTables_wrapper .dataTables_paginate {
+    color: #737373;
+    font-size: 12px;
+    padding: 12px 16px;
+}
+
+.master-page .dataTables_wrapper .dataTables_filter input,
+.master-page .dataTables_wrapper .dataTables_length select {
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    min-height: 34px;
+    padding: 4px 8px;
+}
+
+.master-page .dataTables_wrapper .dataTables_paginate .paginate_button {
+    border-radius: 6px !important;
+    margin-left: 2px;
+}
+
+.master-page .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+    background: #171717 !important;
+    border-color: #171717 !important;
+    color: #fff !important;
+}
+
+@media (max-width: 640px) {
+    .master-field-grid {
+        grid-template-columns: 1fr;
+    }
+}
