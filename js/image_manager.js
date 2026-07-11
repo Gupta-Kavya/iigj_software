@@ -11,6 +11,7 @@ $(document).ready(function () {
   var $selectedCount = $("#selected_count");
   var $imageCount = $("#image_count");
   var $search = $("#image_search");
+  var $folder = $("#image_folder");
   var previewFileName = "";
   var previewFileUrl = "";
   var currentPage = 1;
@@ -45,13 +46,17 @@ $(document).ready(function () {
     $.ajax({
       url: "file_delete.php",
       type: "POST",
-      data: { images: imageNames },
+      data: { images: imageNames, folder: currentFolder() },
       success: onSuccess,
       error: function () {
         alert("Unable to delete images. Please try again.");
       },
       complete: onComplete || function () {}
     });
+  }
+
+  function currentFolder() {
+    return ($folder.val() || "st_images").toString();
   }
 
   function openPreview($item) {
@@ -75,7 +80,8 @@ $(document).ready(function () {
       type: "POST",
       data: {
         page: currentPage,
-        search: $search.val() || ""
+        search: $search.val() || "",
+        folder: currentFolder()
       },
       success: function (response) {
         $imageFiles.html(response);
@@ -221,6 +227,13 @@ $(document).ready(function () {
     }, 250);
   });
 
+  $folder.on("change", function () {
+    previewFileName = "";
+    previewFileUrl = "";
+    $imageFiles.find("input.image-item-checkbox").prop("checked", false);
+    load_images(1);
+  });
+
   $selectFile.on("change", function () {
     var files = this.files || [];
     var formData = new FormData();
@@ -257,6 +270,7 @@ $(document).ready(function () {
 
     var request = new XMLHttpRequest();
     request.open("POST", "file_upload.php");
+    formData.append("folder", currentFolder());
 
     request.upload.addEventListener("progress", function (event) {
       if (!event.lengthComputable) return;

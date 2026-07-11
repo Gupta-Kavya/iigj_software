@@ -47,10 +47,51 @@ function cstone_page_treatment_rows($conn, $userId)
     return $rows;
 }
 
+function cstone_page_general_comment_ready($conn)
+{
+    @$conn->query("CREATE TABLE IF NOT EXISTS `sm_master_general_comment` (
+        `id` int(11) NOT NULL AUTO_INCREMENT,
+        `user_id` int(11) NOT NULL DEFAULT 1,
+        `comment_title` varchar(120) NOT NULL,
+        `description` varchar(500) DEFAULT NULL,
+        `active` tinyint(1) NOT NULL DEFAULT 1,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_general_comment_user` (`user_id`, `active`, `comment_title`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+function cstone_page_general_comment_rows($conn, $userId)
+{
+    cstone_page_general_comment_ready($conn);
+    $rows = [];
+    $sql = "SELECT comment_title, description FROM sm_master_general_comment WHERE " . master_scope_sql($userId) . " AND active = 1 ORDER BY CASE WHEN user_id = " . (int) $userId . " THEN 0 ELSE 1 END, comment_title, id";
+    $result = @$conn->query($sql);
+    if (!$result) {
+        return $rows;
+    }
+    $seen = [];
+    while ($row = $result->fetch_assoc()) {
+        $key = strtolower(trim((string) $row['comment_title']));
+        if ($key === '' || isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $rows[] = $row;
+    }
+    return $rows;
+}
+
 $cstoneUserId = auth_current_user_id();
 $cstoneTreatmentRows = cstone_page_treatment_rows($conn, $cstoneUserId);
+$cstoneGeneralCommentRows = cstone_page_general_comment_rows($conn, $cstoneUserId);
 cstone_report_type_master_ready($conn);
-$cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
+$cstoneFeedType = defined('CSTONE_FEED_TYPE') ? strtoupper((string) CSTONE_FEED_TYPE) : 'S';
+$cstoneFeedType = in_array($cstoneFeedType, ['S', 'P'], true) ? $cstoneFeedType : 'S';
+$cstoneFeedLabel = defined('CSTONE_FEED_LABEL') ? (string) CSTONE_FEED_LABEL : ($cstoneFeedType === 'P' ? 'Pearl' : 'Colour Stone');
+$cstoneFeedTitle = $cstoneFeedLabel . ' Feeding';
+$cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true, $cstoneFeedType);
 ?>
 
 <style>
@@ -111,14 +152,14 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
     .cstone-layout {
         align-items: start;
         display: grid;
-        gap: 14px;
-        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 10px;
+        grid-template-columns: minmax(0, 1fr) 300px;
     }
 
     .cstone-main {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         min-width: 0;
     }
 
@@ -126,18 +167,18 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
         align-items: center;
         background: #fff;
         border: 1px solid #ececf1;
-        border-radius: 10px;
+        border-radius: 8px;
         display: grid;
         gap: 10px;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        padding: 12px 14px;
+        padding: 9px 10px;
     }
 
     .cstone-section {
         background: #fff;
         border: 1px solid #ececf1;
-        border-radius: 10px;
-        padding: 12px;
+        border-radius: 8px;
+        padding: 9px;
     }
 
     .cstone-section-title {
@@ -145,11 +186,11 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
         border-bottom: 1px solid #ececf1;
         color: #171717;
         display: flex;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         gap: 8px;
-        margin: -12px -12px 10px;
-        padding: 10px 12px;
+        margin: -9px -9px 8px;
+        padding: 8px 9px;
     }
 
     .cstone-section-title i {
@@ -159,8 +200,8 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
 
     .cstone-field-grid {
         display: grid;
-        gap: 9px 10px;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 7px 8px;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
     .cstone-field-grid.single-col {
@@ -168,7 +209,7 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
     }
 
     .cstone-field-grid.two-col {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .cstone-field-grid.three-col {
@@ -183,15 +224,17 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
     .cstone-field label {
         color: #404040;
         display: block;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
     }
 
     .cstone-field .form-control {
-        border-radius: 8px;
-        min-height: 34px;
-        padding: 6px 9px;
+        border-radius: 6px;
+        font-size: 12px;
+        height: 28px;
+        min-height: 28px;
+        padding: 4px 7px;
         width: 100%;
     }
 
@@ -204,8 +247,15 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
     }
 
     .cstone-field textarea.form-control {
-        min-height: 58px;
+        height: auto;
+        min-height: 46px;
+        padding-top: 5px;
+        padding-bottom: 5px;
         resize: vertical;
+    }
+
+    .cstone-field textarea.cstone-compact-textarea {
+        min-height: 42px;
     }
 
     .cstone-field .input-group .form-control:first-child {
@@ -216,7 +266,7 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
     .cstone-field .input-group-btn .form-control {
         border-bottom-right-radius: 8px;
         border-top-right-radius: 8px;
-        min-width: 72px;
+        min-width: 62px;
     }
 
     .certi-live-status {
@@ -348,29 +398,39 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
     .cstone-radio-inline {
         align-items: center;
         border: 1px solid #ececf1;
-        border-radius: 8px;
+        border-radius: 6px;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, .8fr);
+        height: 28px;
+        min-height: 28px;
+        padding: 4px 7px;
+    }
+
+    .cstone-radio-inline label {
+        align-items: center;
         display: flex;
-        gap: 14px;
-        min-height: 34px;
-        padding: 6px 9px;
+        gap: 4px;
+        min-width: 0;
+        white-space: nowrap;
     }
 
     .cstone-radio-inline label,
     .cstone-test-grid label {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
         margin: 0;
     }
 
     .cstone-test-grid {
         display: grid;
-        gap: 7px 10px;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px 8px;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
     }
 
     .cstone-measure-grid {
-        gap: 6px 8px;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px 7px;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
     }
 
     .cstone-measure-grid .cstone-field label {
@@ -379,8 +439,9 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
     }
 
     .cstone-measure-grid .form-control {
-        min-height: 30px;
-        padding: 4px 7px;
+        height: 27px;
+        min-height: 27px;
+        padding: 3px 6px;
     }
 
     .cstone-stone-weight-control {
@@ -504,12 +565,12 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
 <div id="page-wrapper">
     <div class="container-fluid cstone-page">
         <div class="cstone-header">
-            <h1><i class="fa fa-diamond"></i> Colour Stone Feeding</h1>
-            <p>Enter certificate details, attach the stone image, and submit to save the report.</p>
+            <h1><i class="fa fa-diamond"></i> <?php echo cstone_page_h($cstoneFeedTitle); ?></h1>
+            <p>Enter certificate details, attach the stone image, and submit to save the <?php echo cstone_page_h(strtolower($cstoneFeedLabel)); ?> report.</p>
         </div>
 
-        <form id="cstone_feed" name="form_stone">
-            <input type="hidden" name="report_type" value="S">
+        <form id="cstone_feed" name="form_stone" data-feed-type="<?php echo cstone_page_h($cstoneFeedType); ?>" data-feed-label="<?php echo cstone_page_h($cstoneFeedLabel); ?>">
+            <input type="hidden" name="report_type" value="<?php echo cstone_page_h($cstoneFeedType); ?>">
             <input type="hidden" name="upload_token" id="upload_token" value="">
             <input type="hidden" name="certi_no" id="certi_no" value="">
             <input type="hidden" name="test_carried_out" id="test_carried_out" value="">
@@ -699,7 +760,7 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
                                 <label for="hardness">Hardness</label>
                                 <input class="form-control" type="text" name="hardness" id="hardness">
                             </div>
-                            <div class="cstone-field">
+                            <div class="cstone-field span-2">
                                 <label>Mode</label>
                                 <div class="cstone-radio-inline">
                                     <label><input type="radio" name="species_mode" value="Species/Variety" checked> Species/Variety</label>
@@ -718,10 +779,10 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
                                 <label for="origin">Origin</label>
                                 <input class="form-control" type="text" name="origin" id="origin">
                             </div>
-                            <div class="cstone-field">
-                                <label for="ebay_prod_no">Ebay Prod No.</label>
+                            <!-- <div class="cstone-field">
+                                <label for="ebay_prod_no">Ebay Prod No.</label> 
                                 <input class="form-control" type="text" name="ebay_prod_no" id="ebay_prod_no">
-                            </div>
+                            </div> -->
                             <div class="cstone-field span-4">
                                 <label>Test Carried Out</label>
                                 <div class="cstone-test-grid">
@@ -776,11 +837,7 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
                             </div>
                             <div class="cstone-field">
                                 <label for="treatment_comment_desc">Description 1</label>
-                                <input class="form-control" type="text" name="treatment_comment_desc" id="treatment_comment_desc">
-                            </div>
-                            <div class="cstone-field span-2">
-                                <label for="treatment_long_comment">Treatment Text 1</label>
-                                <textarea class="form-control" rows="2" name="treatment_long_comment" id="treatment_long_comment"></textarea>
+                                <textarea class="form-control cstone-compact-textarea" rows="2" name="treatment_comment_desc" id="treatment_comment_desc"></textarea>
                             </div>
                             <div class="cstone-field">
                                 <label for="treatment_comment_title_2">Treatment Comment 2</label>
@@ -793,11 +850,20 @@ $cstoneReportTypeRows = cstone_report_type_rows($conn, $cstoneUserId, true);
                             </div>
                             <div class="cstone-field">
                                 <label for="treatment_comment_desc_2">Description 2</label>
-                                <input class="form-control" type="text" name="treatment_comment_desc_2" id="treatment_comment_desc_2">
+                                <textarea class="form-control cstone-compact-textarea" rows="2" name="treatment_comment_desc_2" id="treatment_comment_desc_2"></textarea>
                             </div>
-                            <div class="cstone-field span-2" id="error_class_comments">
-                                <label for="comments">Comments</label>
-                                <textarea class="form-control" rows="2" id="comments" name="comments"></textarea>
+                            <div class="cstone-field">
+                                <label for="general_comment_title">General Comment</label>
+                                <select class="form-control" name="general_comment_title" id="general_comment_title">
+                                    <option value="">Select comment</option>
+                                    <?php foreach ($cstoneGeneralCommentRows as $row): ?>
+                                        <option value="<?php echo cstone_page_h($row['comment_title']); ?>" data-description="<?php echo cstone_page_h($row['description'] ?? ''); ?>"><?php echo cstone_page_h($row['comment_title']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="cstone-field span-3" id="error_class_comments">
+                                <label for="comments">Description</label>
+                                <textarea class="form-control cstone-compact-textarea" rows="2" id="comments" name="comments"></textarea>
                             </div>
                         </div>
                     </div>

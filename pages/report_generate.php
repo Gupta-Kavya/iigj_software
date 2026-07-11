@@ -185,6 +185,8 @@
         padding: 12px 14px;
     }
     .status-box img { height: 28px; width: 28px; }
+    .report-hidden,
+    .pvc-only-format { display: none !important; }
     @media (max-width: 992px) {
         .report-grid { grid-template-columns: 1fr; }
     }
@@ -199,11 +201,11 @@
     <div class="container-fluid report-page">
         <div class="report-hero">
             <h1><i class="fa fa-file-pdf-o fa-fw"></i> Generate Reports</h1>
-            <p>Create single A4, postcard, or print-ready ATM card certificates. Choose the format, enter certificate number/range, and generate the print page.</p>
+            <p>Generate certificates using the saved report type format, or create print-ready PVC card pages.</p>
         </div>
 
         <div class="report-grid">
-            <div class="report-card">
+            <div class="report-card report-hidden">
                 <div class="report-card-header">
                     <div class="report-icon"><i class="fa fa-file-pdf-o"></i></div>
                     <div>
@@ -249,7 +251,7 @@
                 </div>
             </div>
 
-            <div class="report-card">
+            <div class="report-card report-hidden">
                 <div class="report-card-header">
                     <div class="report-icon"><i class="fa fa-file-image-o"></i></div>
                     <div>
@@ -276,22 +278,22 @@
                 <div class="report-card-header">
                     <div class="report-icon"><i class="fa fa-id-card-o"></i></div>
                     <div>
-                        <h3>ATM Card Certificates</h3>
-                        <p class="subtitle">Generate card-size certificates in a print-aligned sheet.</p>
+                        <h3>PVC Card Certificates</h3>
+                        <p class="subtitle">Generate exact CR80 card-size print pages.</p>
                     </div>
                 </div>
                 <div class="report-card-body">
                     <form id="atm-form" method="POST" action="repo-initiator-atm.php" target="_blank">
-                        <div class="report-field">
+                        <div class="report-field pvc-only-format">
                             <label>Print format</label>
-                            <div class="output-mode-grid">
+                            <div class="output-mode-grid pvc-only-format">
                                 <label class="output-mode">
-                                    <input type="radio" name="output_mode" value="sheet" checked>
+                                    <input type="radio" name="output_mode" value="sheet">
                                     <strong>A4 Sheet</strong>
                                     <small>Up to 8 cards arranged on each A4 page.</small>
                                 </label>
                                 <label class="output-mode">
-                                    <input type="radio" name="output_mode" value="pvc">
+                                    <input type="radio" name="output_mode" value="pvc" checked>
                                     <strong>PVC Card Pages</strong>
                                     <small>Exact CR80 size, one print page per certificate.</small>
                                 </label>
@@ -313,10 +315,10 @@
                             <span class="quick-chip" data-count="24">Next 24 cards</span>
                         </div>
                         <div class="report-actions">
-                            <button type="submit" class="btn btn-report-primary" id="atm-submit"><i class="fa fa-print"></i> Generate A4 Card Sheet</button>
+                            <button type="submit" class="btn btn-report-primary" id="atm-submit"><i class="fa fa-print"></i> Generate PVC Card Pages</button>
                             <button type="reset" class="btn btn-report-light">Reset</button>
                         </div>
-                        <div class="report-note" id="atm-output-note">A4 Sheet uses your saved card layout and places up to 8 certificates on each page.</div>
+                        <div class="report-note" id="atm-output-note">Creates an exact 85.60 x 53.98 mm CR80 page for each certificate. In the printer dialog choose matching PVC card stock, Actual size / 100%, and no scaling.</div>
                     </form>
                 </div>
             </div>

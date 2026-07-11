@@ -8,11 +8,15 @@ require_once 'user_branch_helper.php';
 header('Content-Type: application/json; charset=utf-8');
 
 form_master_table_ready($conn);
+agreement_form_data_type_ready($conn);
 
 $userId = auth_current_user_id();
 $scopeSql = user_branch_scope_sql($conn, $userId, 'user_id');
 $agreementNo = (int) preg_replace('/[^0-9]/', '', (string) ($_POST['agreement_no'] ?? '0'));
 $certiNo = (int) preg_replace('/[^0-9]/', '', (string) ($_POST['certi_no'] ?? '0'));
+$reportType = strtoupper(trim((string) ($_POST['report_type'] ?? '')));
+$allowedReportTypes = ['S', 'P', 'J', 'DS', 'D', 'R'];
+$filterType = in_array($reportType, $allowedReportTypes, true) ? $reportType : '';
 
 if ($agreementNo <= 0 || $certiNo <= 0) {
     http_response_code(422);
@@ -26,28 +30,61 @@ if (!$booking) {
     echo json_encode(['status' => 'not_found', 'message' => 'This certificate is not booked in the selected agreement.']);
     exit;
 }
+if (strtolower(trim((string) ($booking['status'] ?? ''))) === 'cancelled') {
+    echo json_encode(['status' => 'not_found', 'message' => 'This agreement row is cancelled and cannot be used for feeding.']);
+    exit;
+}
 
 $existing = null;
+$existingOtherType = null;
 $hasUserId = false;
 $columnResult = @$conn->query("SHOW COLUMNS FROM sm_form_data LIKE 'user_id'");
 if ($columnResult && $columnResult->num_rows > 0) {
     $hasUserId = true;
 }
 if ($hasUserId) {
-    $dataStmt = $conn->prepare("SELECT id, certi_no, report_no FROM sm_form_data WHERE {$scopeSql} AND certi_no = ? LIMIT 1");
+    $typeSql = $filterType !== '' ? ' AND `type` = ?' : '';
+    $dataStmt = $conn->prepare("SELECT * FROM sm_form_data WHERE {$scopeSql} AND ag_no = ? AND certi_no = ?{$typeSql} LIMIT 1");
     if ($dataStmt) {
-        $dataStmt->bind_param('i', $certiNo);
+        if ($filterType !== '') {
+            $dataStmt->bind_param('iis', $agreementNo, $certiNo, $filterType);
+        } else {
+            $dataStmt->bind_param('ii', $agreementNo, $certiNo);
+        }
         $dataStmt->execute();
         $existing = $dataStmt->get_result()->fetch_assoc();
         $dataStmt->close();
     }
+    if (!$existing && $filterType !== '') {
+        $otherStmt = $conn->prepare("SELECT id, `type`, category, report_no FROM sm_form_data WHERE {$scopeSql} AND ag_no = ? AND certi_no = ? LIMIT 1");
+        if ($otherStmt) {
+            $otherStmt->bind_param('ii', $agreementNo, $certiNo);
+            $otherStmt->execute();
+            $existingOtherType = $otherStmt->get_result()->fetch_assoc();
+            $otherStmt->close();
+        }
+    }
 } else {
-    $dataStmt = $conn->prepare('SELECT id, certi_no, report_no FROM sm_form_data WHERE certi_no = ? LIMIT 1');
+    $typeSql = $filterType !== '' ? ' AND `type` = ?' : '';
+    $dataStmt = $conn->prepare("SELECT * FROM sm_form_data WHERE ag_no = ? AND certi_no = ?{$typeSql} LIMIT 1");
     if ($dataStmt) {
-        $dataStmt->bind_param('i', $certiNo);
+        if ($filterType !== '') {
+            $dataStmt->bind_param('iis', $agreementNo, $certiNo, $filterType);
+        } else {
+            $dataStmt->bind_param('ii', $agreementNo, $certiNo);
+        }
         $dataStmt->execute();
         $existing = $dataStmt->get_result()->fetch_assoc();
         $dataStmt->close();
+    }
+    if (!$existing && $filterType !== '') {
+        $otherStmt = $conn->prepare('SELECT id, `type`, category, report_no FROM sm_form_data WHERE ag_no = ? AND certi_no = ? LIMIT 1');
+        if ($otherStmt) {
+            $otherStmt->bind_param('ii', $agreementNo, $certiNo);
+            $otherStmt->execute();
+            $existingOtherType = $otherStmt->get_result()->fetch_assoc();
+            $otherStmt->close();
+        }
     }
 }
 
@@ -74,6 +111,7 @@ echo json_encode([
         'amount' => (string) $booking['amount'],
         'status' => (string) $booking['status'],
     ],
-    'existing_report' => $existing ? true : false,
+    'existing_report' => $existing ?: null,
+    'existing_other_type' => $existingOtherType ?: null,
 ]);
 ?>

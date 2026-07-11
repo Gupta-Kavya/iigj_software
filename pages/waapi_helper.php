@@ -61,4 +61,66 @@ function waapi_chat_ids_from_mobile_field($value)
     }
     return array_keys($chatIds);
 }
+
+function waapi_send_text_message($conn, $chatIds, $message)
+{
+    $settings = waapi_get_settings($conn);
+    if ($settings['instance_id'] === '' || $settings['api_key'] === '') {
+        return ['ok' => false, 'sent' => 0, 'failed' => [], 'message' => 'WhatsApp API settings are missing. Add Instance ID and API key in Super Admin.'];
+    }
+    if (!function_exists('curl_init')) {
+        return ['ok' => false, 'sent' => 0, 'failed' => [], 'message' => 'PHP cURL extension is required to send WhatsApp messages.'];
+    }
+
+    $chatIds = is_array($chatIds) ? array_values(array_unique(array_filter($chatIds))) : [];
+    if (!$chatIds) {
+        return ['ok' => false, 'sent' => 0, 'failed' => [], 'message' => 'Customer mobile number is missing.'];
+    }
+
+    $url = 'https://waapi.app/api/v1/instances/' . rawurlencode($settings['instance_id']) . '/client/action/send-message';
+    $sent = 0;
+    $failed = [];
+    foreach ($chatIds as $chatId) {
+        $payload = [
+            'chatId' => $chatId,
+            'message' => (string) $message,
+            'previewLink' => false,
+        ];
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $settings['api_key'],
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_TIMEOUT => 35,
+        ]);
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $statusCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_close($ch);
+
+        if ($response !== false && $statusCode >= 200 && $statusCode < 300) {
+            $sent++;
+        } else {
+            $failed[] = [
+                'chat_id' => $chatId,
+                'status' => $statusCode,
+                'message' => $curlError !== '' ? $curlError : 'WaAPI status: ' . $statusCode,
+                'response' => $response,
+            ];
+        }
+    }
+
+    return [
+        'ok' => $sent > 0,
+        'sent' => $sent,
+        'failed' => $failed,
+        'message' => $sent > 0
+            ? ($failed ? 'WhatsApp sent to ' . $sent . ' number(s). Failed: ' . count($failed) . '.' : 'WhatsApp sent to ' . $sent . ' number(s).')
+            : 'WhatsApp send failed for all mobile numbers.',
+    ];
+}
 ?>

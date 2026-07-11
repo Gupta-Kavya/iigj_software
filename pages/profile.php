@@ -19,7 +19,7 @@ function profile_redirect($message, $type = 'success')
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if (!hash_equals($csrfToken, (string) ($_POST['csrf_token'] ?? ''))) {
         profile_redirect('Your session expired. Refresh the page and try again.', 'error');
     }
@@ -35,13 +35,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim((string) ($_POST['phone'] ?? ''));
         $gstNumber = app_normalize_gst($_POST['gst_number'] ?? '');
 
-        if ($fullName === '' || mb_strlen($fullName) > 120) {
+        if ($fullName === '' || strlen($fullName) > 120) {
             profile_redirect('Please enter a valid full name.', 'error');
         }
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 150) {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 150) {
             profile_redirect('Please enter a valid email address.', 'error');
         }
-        if (mb_strlen($companyName) > 150 || mb_strlen($phone) > 30) {
+        if (strlen($companyName) > 150 || strlen($phone) > 30) {
             profile_redirect('Company name or phone number is too long.', 'error');
         }
         if (!app_valid_gst($gstNumber)) {
@@ -138,16 +138,18 @@ if (!$user) {
 
 $reportCount = 0;
 $imageCount = 0;
-$stmt = $conn->prepare('SELECT COUNT(*) AS total FROM sm_form_data WHERE user_id = ?');
-$stmt->bind_param('i', $userId);
+$reportScopeSql = user_branch_location_scope_sql($conn, $userId, 'location');
+$stmt = $conn->prepare("SELECT COUNT(*) AS total FROM sm_form_data WHERE {$reportScopeSql}");
 $stmt->execute();
 $reportCount = (int) ($stmt->get_result()->fetch_assoc()['total'] ?? 0);
 $stmt->close();
 
-$imageDir = __DIR__ . '/user_data/user_' . $userId . '/st_images';
+$imageDir = atm_user_image_dir('st_images');
 if (is_dir($imageDir)) {
-    $images = glob($imageDir . '/*.jpg');
-    $imageCount = is_array($images) ? count($images) : 0;
+    foreach (['jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG'] as $ext) {
+        $images = glob($imageDir . '/*.' . $ext);
+        $imageCount += is_array($images) ? count($images) : 0;
+    }
 }
 
 $numberingSettings = atm_numbering_settings($conn, $userId);
@@ -162,7 +164,7 @@ include 'assets/navbar.php';
 </style>
 <div id="page-wrapper"><div class="container-fluid profile-page">
     <div class="profile-hero">
-        <div class="profile-avatar"><?php echo htmlspecialchars(strtoupper(mb_substr($user['full_name'], 0, 1))); ?></div>
+        <div class="profile-avatar"><?php echo htmlspecialchars(strtoupper(substr($user['full_name'], 0, 1))); ?></div>
         <div><h1><?php echo htmlspecialchars((string) $user['full_name']); ?></h1><p><?php echo htmlspecialchars((string) ($user['company_name'] ?: 'Laboratory account')); ?> · <?php echo htmlspecialchars((string) $user['email']); ?></p></div>
         <span class="profile-status"><?php echo htmlspecialchars($user['status']); ?></span>
     </div>

@@ -78,6 +78,8 @@ function a4_default_fields($type = 'S')
         $field['fontWeight'] = 'normal';
         $field['fontSize'] = null;
         $field['fontColor'] = '';
+        $field['labelFontColor'] = '';
+        $field['valueFontColor'] = '';
         $field['fontFamily'] = '';
         $field['labelWidth'] = null;
         $field['labelAlign'] = 'left';
@@ -97,6 +99,9 @@ function a4_default_fields($type = 'S')
         } elseif ($type === 'R') {
             $field['display'] = in_array($key, array_merge(['reportNo', 'date', 'weight', 'shapeCut', 'dimension', 'colour', 'issuedTo'], $rudrakshaKeys), true) ? 'block' : 'none';
         } elseif (in_array($key, array_merge($diamondKeys, $jewelleryKeys, $rudrakshaKeys), true)) {
+            $field['display'] = 'none';
+        }
+        if (atm_base_report_type($type) === 'S' && in_array($key, ['speciesGroup', 'speciesMode'], true)) {
             $field['display'] = 'none';
         }
     }
@@ -139,8 +144,12 @@ function a4_default_settings($type = 'S')
         'labelWidth' => 170,
         'fields' => a4_default_fields($type),
         'stoneImage' => ['display' => 'block', 'x' => 770, 'y' => 245, 'w' => 185, 'h' => 140],
+        'proportionImage' => ['display' => 'none', 'x' => 735, 'y' => 90, 'w' => 150, 'h' => 110],
+        'clarityImage' => ['display' => 'none', 'x' => 890, 'y' => 90, 'w' => 150, 'h' => 110],
+        'symbolKey' => ['display' => 'none', 'x' => 440, 'y' => 305, 'w' => 250, 'h' => 140, 'fontSize' => 10],
         'qrCode' => ['display' => 'block', 'x' => 965, 'y' => 582, 'w' => 72, 'h' => 72],
         'additionalImages' => [],
+        'additionalTexts' => [],
     ];
 }
 
@@ -224,8 +233,12 @@ function a4_settings_file($type = 'S')
     if (preg_match('/^CS([0-9]+)$/', $type, $match)) {
         return atm_user_file('a4-report-settings-colour-stone-type-' . (int) $match[1] . '.json');
     }
+    if (preg_match('/^PR([0-9]+)$/', $type, $match)) {
+        return atm_user_file('a4-report-settings-pearl-type-' . (int) $match[1] . '.json');
+    }
     if ($type === 'D') return atm_user_file('a4-report-settings-diamond.json');
     if ($type === 'J') return atm_user_file('a4-report-settings-jewellery.json');
+    if ($type === 'P') return atm_user_file('a4-report-settings-pearl.json');
     if ($type === 'R') return atm_user_file('a4-report-settings-rudraksha.json');
     return atm_user_file('a4-report-settings.json');
 }
@@ -258,27 +271,105 @@ function a4_read_settings($type = 'S')
             'fontWeight' => true,
             'fontSize' => true,
             'fontColor' => true,
+            'labelFontColor' => true,
+            'valueFontColor' => true,
             'fontFamily' => true,
+            'labelFontFamily' => true,
+            'valueFontFamily' => true,
             'labelWidth' => true,
             'labelAlign' => true,
             'valueAlign' => true,
+            'condition' => true,
             'x' => true,
             'y' => true,
             'w' => true,
             'h' => true,
         ]));
         $normalizedFields[$key]['valueType'] = $fallback['valueType'] ?? '';
+        if (atm_base_report_type($type) === 'S' && in_array($key, ['speciesGroup', 'speciesMode'], true)) {
+            $normalizedFields[$key]['display'] = 'none';
+        }
     }
     $settings['fields'] = $normalizedFields;
     if ($isLegacyFieldLayout) {
         $settings['stoneImage'] = $defaults['stoneImage'];
+        $settings['proportionImage'] = $defaults['proportionImage'];
+        $settings['clarityImage'] = $defaults['clarityImage'];
+        $settings['symbolKey'] = $defaults['symbolKey'];
         $settings['qrCode'] = $defaults['qrCode'];
     }
     $baseWidth = $settings['orientation'] === 'portrait' ? 794 : 1122;
     $baseHeight = $settings['orientation'] === 'portrait' ? 1122 : 794;
+    foreach (['stoneImage', 'proportionImage', 'clarityImage', 'qrCode'] as $imageKey) {
+        $savedImage = isset($saved[$imageKey]) && is_array($saved[$imageKey]) ? $saved[$imageKey] : [];
+        $settings[$imageKey] = array_replace($defaults[$imageKey], array_intersect_key($savedImage, [
+            'display' => true,
+            'x' => true,
+            'y' => true,
+            'w' => true,
+            'h' => true,
+        ]));
+        $settings[$imageKey]['display'] = atm_display_value($settings[$imageKey]['display'] ?? $defaults[$imageKey]['display']);
+        $settings[$imageKey]['x'] = atm_clamp($settings[$imageKey]['x'] ?? $defaults[$imageKey]['x'], 0, $baseWidth);
+        $settings[$imageKey]['y'] = atm_clamp($settings[$imageKey]['y'] ?? $defaults[$imageKey]['y'], 0, $baseHeight);
+        $settings[$imageKey]['w'] = atm_clamp($settings[$imageKey]['w'] ?? $defaults[$imageKey]['w'], 20, $baseWidth);
+        $settings[$imageKey]['h'] = atm_clamp($settings[$imageKey]['h'] ?? $defaults[$imageKey]['h'], 20, $baseHeight);
+    }
+    $savedSymbolKey = isset($saved['symbolKey']) && is_array($saved['symbolKey']) ? $saved['symbolKey'] : [];
+    $settings['symbolKey'] = array_replace($defaults['symbolKey'], array_intersect_key($savedSymbolKey, [
+        'display' => true,
+        'x' => true,
+        'y' => true,
+        'w' => true,
+        'h' => true,
+        'fontSize' => true,
+    ]));
+    $settings['symbolKey']['display'] = atm_display_value($settings['symbolKey']['display'] ?? 'none');
+    $settings['symbolKey']['x'] = atm_clamp($settings['symbolKey']['x'] ?? $defaults['symbolKey']['x'], 0, $baseWidth);
+    $settings['symbolKey']['y'] = atm_clamp($settings['symbolKey']['y'] ?? $defaults['symbolKey']['y'], 0, $baseHeight);
+    $settings['symbolKey']['w'] = atm_clamp($settings['symbolKey']['w'] ?? $defaults['symbolKey']['w'], 40, $baseWidth);
+    $settings['symbolKey']['h'] = atm_clamp($settings['symbolKey']['h'] ?? $defaults['symbolKey']['h'], 30, $baseHeight);
+    $settings['symbolKey']['fontSize'] = atm_clamp($settings['symbolKey']['fontSize'] ?? $defaults['symbolKey']['fontSize'], 6, 24);
     $settings['additionalImages'] = atm_normalize_additional_images($settings['additionalImages'] ?? [], $baseWidth, $baseHeight, 120, 80);
+    $settings['additionalTexts'] = a4_normalize_additional_texts($settings['additionalTexts'] ?? [], $baseWidth, $baseHeight);
 
     return $settings;
+}
+
+function a4_normalize_additional_texts($items, $baseWidth = 1122, $baseHeight = 794)
+{
+    if (!is_array($items)) {
+        return [];
+    }
+    $texts = [];
+    foreach ($items as $index => $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $id = trim((string) ($item['id'] ?? ''));
+        $text = trim((string) ($item['text'] ?? ''));
+        if ($text === '') {
+            $text = 'Additional Text';
+        }
+        $fontFamily = trim((string) ($item['fontFamily'] ?? ''));
+        $fontColor = trim((string) ($item['fontColor'] ?? '#000000'));
+        $texts[] = [
+            'id' => $id !== '' ? preg_replace('/[^A-Za-z0-9_-]/', '', $id) : ('txt_' . time() . '_' . $index),
+            'text' => substr($text, 0, 500),
+            'display' => atm_display_value($item['display'] ?? 'block'),
+            'condition' => substr(trim((string) ($item['condition'] ?? '')), 0, 300),
+            'fontFamily' => $fontFamily !== '' && a4_font_family_allowed($fontFamily) ? $fontFamily : '',
+            'fontSize' => atm_clamp($item['fontSize'] ?? 12, 6, 60),
+            'fontColor' => preg_match('/^#[0-9a-fA-F]{6}$/', $fontColor) ? strtoupper($fontColor) : '#000000',
+            'fontWeight' => (($item['fontWeight'] ?? '') === 'bold') ? 'bold' : 'normal',
+            'align' => in_array(($item['align'] ?? 'left'), ['left', 'center', 'right'], true) ? $item['align'] : 'left',
+            'x' => atm_clamp($item['x'] ?? 40, 0, $baseWidth),
+            'y' => atm_clamp($item['y'] ?? 40, 0, $baseHeight),
+            'w' => atm_clamp($item['w'] ?? 180, 20, $baseWidth),
+            'h' => atm_clamp($item['h'] ?? 40, 10, $baseHeight),
+        ];
+    }
+    return $texts;
 }
 
 function a4_background_path($settings)

@@ -208,6 +208,25 @@ function user_branch_scope_sql($conn, $userId, $column = 'user_id')
     return "`" . str_replace('.', '`.`', $column) . "` IN (" . implode(',', $ids) . ")";
 }
 
+function user_branch_location_scope_sql($conn, $userId, $column = 'location')
+{
+    $column = preg_replace('/[^A-Za-z0-9_\.]/', '', (string) $column);
+    if ($column === '') {
+        $column = 'location';
+    }
+    if (function_exists('auth_is_super_admin') && auth_is_super_admin()) {
+        return '1=1';
+    }
+
+    $location = user_branch_location_for_user($conn, $userId);
+    if ($location === '') {
+        return '1=0';
+    }
+
+    $escaped = $conn->real_escape_string($location);
+    return "`" . str_replace('.', '`.`', $column) . "` = '{$escaped}'";
+}
+
 function user_branch_storage_code($conn, $userId)
 {
     $location = user_branch_location_for_user($conn, $userId);
@@ -215,5 +234,116 @@ function user_branch_storage_code($conn, $userId)
         return 'user_' . (int) $userId;
     }
     return 'branch_' . strtolower(user_branch_location_normalize($location));
+}
+
+function user_collection_center_code_normalize($value)
+{
+    return substr(preg_replace('/[^0-9A-Z]/', '', strtoupper(trim((string) $value))), 0, 6);
+}
+
+function user_collection_center_ready($conn)
+{
+    user_branch_location_ready($conn);
+    $ready = (bool) @$conn->query("CREATE TABLE IF NOT EXISTS `sm_collection_centers` (
+        `id` int(11) NOT NULL AUTO_INCREMENT,
+        `branch_location` varchar(60) NOT NULL,
+        `center_name` varchar(120) NOT NULL,
+        `center_code` varchar(6) NOT NULL,
+        `active` tinyint(1) NOT NULL DEFAULT 1,
+        `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` datetime DEFAULT NULL,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_sm_collection_centers_branch_code` (`branch_location`,`center_code`),
+        KEY `idx_sm_collection_centers_branch` (`branch_location`,`active`,`center_name`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+    if ($ready) {
+        user_collection_center_seed($conn);
+    }
+    return $ready;
+}
+
+function user_collection_center_seed($conn)
+{
+    $stmt = $conn->prepare('INSERT IGNORE INTO sm_collection_centers (branch_location, center_name, center_code, active) VALUES (?, ?, ?, 1)');
+    if (!$stmt) {
+        return;
+    }
+    foreach (user_branch_locations($conn, false) as $branch => $label) {
+        $code = user_collection_center_code_normalize(substr($branch, 0, 1));
+        if ($branch === '' || $code === '') {
+            continue;
+        }
+        $name = trim((string) $label) ?: $branch;
+        $stmt->bind_param('sss', $branch, $name, $code);
+        $stmt->execute();
+    }
+    $stmt->close();
+}
+
+function user_collection_centers($conn, $branchLocation)
+{
+    user_collection_center_ready($conn);
+    $branchLocation = user_branch_location_clean($branchLocation, $conn);
+    if ($branchLocation === '') {
+        return [];
+    }
+    $stmt = $conn->prepare('SELECT id, branch_location, center_name, center_code, active FROM sm_collection_centers WHERE branch_location = ? AND active = 1 ORDER BY center_name ASC, center_code ASC');
+    if (!$stmt) {
+        return [];
+    }
+    $stmt->bind_param('s', $branchLocation);
+    $stmt->execute();
+    $rows = [];
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $rows[] = $row;
+    }
+    $stmt->close();
+    if (!$rows) {
+        user_collection_center_seed($conn);
+        $stmt = $conn->prepare('SELECT id, branch_location, center_name, center_code, active FROM sm_collection_centers WHERE branch_location = ? AND active = 1 ORDER BY center_name ASC, center_code ASC');
+        if ($stmt) {
+            $stmt->bind_param('s', $branchLocation);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $rows[] = $row;
+            }
+            $stmt->close();
+        }
+    }
+    return $rows;
+}
+
+function user_collection_center_for_user($conn, $userId, $centerId = 0)
+{
+    $branchLocation = user_branch_location_for_user($conn, $userId);
+    $centers = user_collection_centers($conn, $branchLocation);
+    $centerId = (int) $centerId;
+    foreach ($centers as $center) {
+        if ($centerId > 0 && (int) $center['id'] === $centerId) {
+            return $center;
+        }
+    }
+    return $centers ? $centers[0] : [
+        'id' => 0,
+        'branch_location' => $branchLocation,
+        'center_name' => user_branch_location_label($conn, $branchLocation),
+        'center_code' => user_collection_center_code_normalize(substr($branchLocation ?: 'S', 0, 1)) ?: 'S',
+        'active' => 1,
+    ];
+}
+
+function user_collection_center_options($conn, $userId, $selectedId = 0)
+{
+    $branchLocation = user_branch_location_for_user($conn, $userId);
+    $selectedId = (int) $selectedId;
+    $html = '';
+    foreach (user_collection_centers($conn, $branchLocation) as $center) {
+        $id = (int) $center['id'];
+        $label = trim((string) $center['center_name']) . ' (' . trim((string) $center['center_code']) . ')';
+        $html .= '<option value="' . htmlspecialchars((string) $id, ENT_QUOTES, 'UTF-8') . '" data-code="' . htmlspecialchars((string) $center['center_code'], ENT_QUOTES, 'UTF-8') . '" ' . ($id === $selectedId ? 'selected' : '') . '>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</option>';
+    }
+    return $html;
 }
 ?>

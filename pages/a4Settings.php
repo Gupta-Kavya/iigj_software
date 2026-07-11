@@ -10,6 +10,7 @@ $settings = a4_read_settings($builderType);
 $builderFieldKeys = atm_builder_field_keys($builderType);
 $message = '';
 $messageType = 'success';
+$builderBackupStatus = $_GET['builder_backup'] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['background_image'])) {
     if ($_FILES['background_image']['error'] === UPLOAD_ERR_OK) {
@@ -19,8 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['background_image']))
             $extension = $extensions[$info['mime']];
             if (preg_match('/^CS([0-9]+)$/', $builderType, $match)) {
                 $backgroundName = 'a4-background-colour-stone-type-' . (int) $match[1] . '.';
+            } elseif (preg_match('/^PR([0-9]+)$/', $builderType, $match)) {
+                $backgroundName = 'a4-background-pearl-type-' . (int) $match[1] . '.';
             } else {
-                $backgroundName = $builderType === 'D' ? 'a4-background-diamond.' : ($builderType === 'J' ? 'a4-background-jewellery.' : ($builderType === 'R' ? 'a4-background-rudraksha.' : 'a4-background.'));
+                $backgroundName = $builderType === 'D' ? 'a4-background-diamond.' : ($builderType === 'J' ? 'a4-background-jewellery.' : ($builderType === 'P' ? 'a4-background-pearl.' : ($builderType === 'R' ? 'a4-background-rudraksha.' : 'a4-background.')));
             }
             $relativePath = atm_user_asset_relative($backgroundName . $extension);
             $targetPath = __DIR__ . '/' . $relativePath;
@@ -65,8 +68,13 @@ $fontOptions = a4_font_options();
 .a4-draggable.a4-group-selected{outline-color:#16a34a;background:rgba(220,252,231,.62)}
 .a4-draggable.a4-selected.a4-group-selected{outline-color:#2563eb;background:rgba(219,234,254,.72)}
 .a4-draggable.hidden-item{opacity:.25}.a4-label{font-weight:300;display:inline-block;vertical-align:top}.a4-value{display:inline-block;font-weight:300;vertical-align:top;white-space:normal;overflow-wrap:anywhere}
-#a4Stone img,.a4-extra-image img{width:100%;height:100%;object-fit:contain;display:block}.qr-placeholder{width:100%;height:100%;background:repeating-linear-gradient(45deg,#111 0,#111 4px,#fff 4px,#fff 8px);display:flex;align-items:center;justify-content:center}.qr-placeholder span{background:#fff;padding:3px 6px;font-weight:600}
+#a4Stone img,#a4Proportion img,#a4Clarity img,.a4-extra-image img{width:100%;height:100%;object-fit:contain;display:block}.image-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;border:1px dashed #8a8a8a;background:#fafafa;color:#404040;font-size:12px;font-weight:600}.qr-placeholder{width:100%;height:100%;background:repeating-linear-gradient(45deg,#111 0,#111 4px,#fff 4px,#fff 8px);display:flex;align-items:center;justify-content:center}.qr-placeholder span{background:#fff;padding:3px 6px;font-weight:600}
+#a4SymbolKey{background:rgba(255,255,255,.62);font-size:10px;line-height:1.45;padding:7px 9px}
+.symbol-key-row{display:grid;grid-template-columns:22px 36px 1fr;align-items:center;gap:8px;margin:8px 0;white-space:nowrap}
+.symbol-key-icon{width:14px;height:14px;object-fit:contain}
+.a4-extra-text{background:rgba(255,255,255,.55);white-space:normal;overflow:hidden;word-break:break-word}
 .a4-extra-image.a4-extra-selected{outline-color:#dc2626;background:rgba(254,226,226,.55)}
+.a4-extra-text.a4-extra-selected{outline-color:#7c3aed;background:rgba(237,233,254,.6)}
 .a4-tools-card{max-height:none;overflow:visible;padding:18px}.tool-section{border-bottom:1px solid #ececf1;padding-bottom:14px;margin-bottom:14px}.tool-section:last-child{border-bottom:0;margin-bottom:0}
 .a4-tools-card::-webkit-scrollbar{width:8px}.a4-tools-card::-webkit-scrollbar-track{background:#f1f5f9;border-radius:999px}.a4-tools-card::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px}.a4-tools-card::-webkit-scrollbar-thumb:hover{background:#94a3b8}
 .tool-section h4{font-size:13px;font-weight:600;text-transform:none;color:#737373;margin:0 0 10px}.control-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.control-grid label,.field-list label{font-size:12px;color:#404040;font-weight:500;margin-bottom:4px}.field-list{max-height:260px;overflow:auto;border:1px solid #ececf1;border-radius:8px;padding:10px;background:#f7f7f8}.field-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.field-row select{width:92px}
@@ -88,6 +96,15 @@ $fontOptions = a4_font_options();
         <li><a href="postcardSettings.php?type=<?php echo $builderType; ?>">Postcard Builder</a></li>
     </ul>
     <?php if ($message): ?><div class="alert alert-<?php echo $messageType; ?>"><?php echo htmlspecialchars($message); ?></div><?php endif; ?>
+    <?php if ($builderBackupStatus): ?>
+        <div class="alert alert-<?php echo $builderBackupStatus === 'imported' ? 'success' : 'danger'; ?>">
+            <?php
+            echo htmlspecialchars($builderBackupStatus === 'imported'
+                ? 'Builder backup imported successfully.'
+                : 'Unable to import builder backup. Please choose a valid A4 builder backup file.');
+            ?>
+        </div>
+    <?php endif; ?>
     <div class="builder-shell">
         <div class="a4-preview-card">
             <div class="a4-card-head"><h3>Live A4 Layout</h3><p>Drag and resize fields, stone image and QR code. Save when finished.</p></div>
@@ -100,6 +117,13 @@ $fontOptions = a4_font_options();
                         </div>
                     <?php endforeach; ?>
                     <div class="a4-draggable" id="a4Stone"><img src="assets/st_images/2.jpg" alt="Stone"></div>
+                    <div class="a4-draggable" id="a4Proportion"><div class="image-placeholder">Proportion</div></div>
+                    <div class="a4-draggable" id="a4Clarity"><div class="image-placeholder">Clarity</div></div>
+                    <div class="a4-draggable" id="a4SymbolKey">
+                        <div class="symbol-key-row"><span>1.</span><span style="color:#16a34a;font-size:18px;">&#8728;</span><span>Bruting Line</span></div>
+                        <div class="symbol-key-row"><span>2.</span><span style="color:#e11d48;font-size:16px;">&#9656;</span><span>Cavity</span></div>
+                        <div class="symbol-key-row"><span>3.</span><span style="color:#16a34a;font-size:18px;">&#10003;</span><span>Chip External</span></div>
+                    </div>
                     <div class="a4-draggable" id="a4Qr"><div class="qr-placeholder"><span>QR</span></div></div>
                     <?php foreach (($settings['additionalImages'] ?? []) as $extraImage): $extraPath = __DIR__ . '/' . ($extraImage['src'] ?? ''); $extraSrc = is_file($extraPath) ? ($extraImage['src'] . '?v=' . filemtime($extraPath)) : ($extraImage['src'] ?? ''); ?>
                         <div class="a4-draggable a4-extra-image" data-id="<?php echo htmlspecialchars($extraImage['id'] ?? ''); ?>">
@@ -127,6 +151,18 @@ $fontOptions = a4_font_options();
                 </form>
             </div>
             <div class="tool-section">
+                <h4>Backup &amp; Restore</h4>
+                <p class="builder-help">Download this A4 builder layout as a backup, or import a saved backup into the selected certificate design.</p>
+                <a class="btn btn-default btn-wide" href="builder-settings-backup.php?action=export&amp;kind=a4&amp;type=<?php echo urlencode($builderType); ?>"><i class="fa fa-download"></i> Download Backup</a>
+                <form method="post" enctype="multipart/form-data" action="builder-settings-backup.php" style="margin-top:10px;">
+                    <input type="hidden" name="action" value="import">
+                    <input type="hidden" name="kind" value="a4">
+                    <input type="hidden" name="type" value="<?php echo htmlspecialchars($builderType); ?>">
+                    <input type="file" name="backup_file" accept="application/json,.json" class="form-control" required>
+                    <button type="submit" class="btn btn-primary btn-wide" style="margin-top:10px;"><i class="fa fa-upload"></i> Import Backup</button>
+                </form>
+            </div>
+            <div class="tool-section">
                 <h4>Text Style</h4>
                 <div class="control-grid">
                     <div><label>Font</label><select id="fontFamily" class="form-control"><?php foreach ($fontOptions as $fontOption): ?><option value="<?php echo htmlspecialchars($fontOption['family']); ?>"><?php echo htmlspecialchars($fontOption['label']); ?></option><?php endforeach; ?></select></div>
@@ -150,8 +186,23 @@ $fontOptions = a4_font_options();
                         </div>
                     <?php endforeach; ?>
                     <div class="field-row"><label>Stone Image</label><select class="form-control" id="stoneDisplay"><option value="block">Show</option><option value="none">Hide</option></select></div>
+                    <div class="field-row"><label>Proportion Image</label><select class="form-control" id="proportionDisplay"><option value="block">Show</option><option value="none">Hide</option></select></div>
+                    <div class="field-row"><label>Clarity Image</label><select class="form-control" id="clarityDisplay"><option value="block">Show</option><option value="none">Hide</option></select></div>
+                    <div class="field-row"><label>Key to Symbols</label><select class="form-control" id="symbolKeyDisplay"><option value="block">Show</option><option value="none">Hide</option></select></div>
                     <div class="field-row"><label>QR Code</label><select class="form-control" id="qrDisplay"><option value="block">Show</option><option value="none">Hide</option></select></div>
                 </div>
+            </div>
+            <div class="tool-section">
+                <h4>Key to Symbols</h4>
+                <p class="builder-help">For Diamond Grading, this prints the selected symbols with their saved images from <code>symbol_images</code>.</p>
+                <div class="control-grid">
+                    <div><label>X Axis</label><input type="number" id="symbolKeyX" class="form-control" step="1"></div>
+                    <div><label>Y Axis</label><input type="number" id="symbolKeyY" class="form-control" step="1"></div>
+                    <div><label>Width</label><input type="number" id="symbolKeyW" class="form-control" min="40" step="1"></div>
+                    <div><label>Height</label><input type="number" id="symbolKeyH" class="form-control" min="30" step="1"></div>
+                    <div><label>Font Size</label><input type="number" id="symbolKeyFontSize" class="form-control" min="6" max="24" step="1"></div>
+                </div>
+                <button type="button" id="applySymbolKeyBox" class="btn btn-default btn-wide" style="margin-top:10px;">Apply Symbol Box</button>
             </div>
             <div class="tool-section">
                 <h4>Additional Images</h4>
@@ -164,19 +215,43 @@ $fontOptions = a4_font_options();
                 <div id="extraImagesList" class="field-list" style="margin-top:10px;max-height:130px;"></div>
             </div>
             <div class="tool-section">
+                <h4>Additional Text</h4>
+                <p class="builder-help">Add any fixed text, then drag and resize it. Conditions can use fields like <code>color = red and stone_wt1 &gt; 7</code>.</p>
+                <textarea id="extraTextContent" class="form-control" rows="2" placeholder="Text to print"></textarea>
+                <div class="control-grid" style="margin-top:10px;">
+                    <div><label>Font</label><select id="extraTextFontFamily" class="form-control"><option value="">Use Global Font</option><?php foreach ($fontOptions as $fontOption): ?><option value="<?php echo htmlspecialchars($fontOption['family']); ?>"><?php echo htmlspecialchars($fontOption['label']); ?></option><?php endforeach; ?></select></div>
+                    <div><label>Font Size</label><input type="number" id="extraTextFontSize" class="form-control" min="6" max="60" value="12"></div>
+                    <div><label>Color</label><input type="color" id="extraTextFontColor" class="form-control" value="#000000"></div>
+                    <div><label>Weight</label><select id="extraTextFontWeight" class="form-control"><option value="normal">Regular</option><option value="bold">Bold</option></select></div>
+                    <div><label>Align</label><select id="extraTextAlign" class="form-control"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
+                    <div><label>Display</label><select id="extraTextDisplay" class="form-control"><option value="block">Show</option><option value="none">Hide</option></select></div>
+                    <div style="grid-column:1 / -1;"><label>Display Condition</label><input type="text" id="extraTextCondition" class="form-control" placeholder="Example: color = red and stone_wt1 > 7"></div>
+                </div>
+                <div class="mini-actions">
+                    <button type="button" id="addExtraText" class="btn btn-default btn-mini">Add Text</button>
+                    <button type="button" id="updateExtraText" class="btn btn-default btn-mini">Update Selected</button>
+                </div>
+                <button type="button" id="deleteExtraText" class="btn btn-default btn-wide" style="margin-top:8px;">Delete Selected Text</button>
+                <div id="extraTextsList" class="field-list" style="margin-top:10px;max-height:130px;"></div>
+            </div>
+            <div class="tool-section">
                 <h4>Selected Field Style</h4>
                 <div class="control-grid">
                     <div style="grid-column:1 / -1;"><label>Label Name</label><input type="text" id="a4FieldLabelText" class="form-control"></div>
                     <div style="grid-column:1 / -1;"><label>Field Font</label><select id="a4FieldFontFamily" class="form-control"><option value="">Use Global Font</option><?php foreach ($fontOptions as $fontOption): ?><option value="<?php echo htmlspecialchars($fontOption['family']); ?>"><?php echo htmlspecialchars($fontOption['label']); ?></option><?php endforeach; ?></select></div>
+                    <div><label>Label Font</label><select id="a4FieldLabelFontFamily" class="form-control"><option value="">Use Field Font</option><?php foreach ($fontOptions as $fontOption): ?><option value="<?php echo htmlspecialchars($fontOption['family']); ?>"><?php echo htmlspecialchars($fontOption['label']); ?></option><?php endforeach; ?></select></div>
+                    <div><label>Value Font</label><select id="a4FieldValueFontFamily" class="form-control"><option value="">Use Field Font</option><?php foreach ($fontOptions as $fontOption): ?><option value="<?php echo htmlspecialchars($fontOption['family']); ?>"><?php echo htmlspecialchars($fontOption['label']); ?></option><?php endforeach; ?></select></div>
                     <div><label>Label Display</label><select id="a4FieldShowLabel" class="form-control"><option value="block">Show</option><option value="none">Hide</option></select></div>
                     <div><label>Colon Display</label><select id="a4FieldShowColon" class="form-control"><option value="block">Show</option><option value="none">Hide</option></select></div>
                     <div><label>Label Weight</label><select id="a4FieldLabelFontWeight" class="form-control"><option value="normal">Regular</option><option value="bold">Bold</option></select></div>
                     <div><label>Value Weight</label><select id="a4FieldFontWeight" class="form-control"><option value="normal">Regular</option><option value="bold">Bold</option></select></div>
                     <div><label>Font Size</label><input type="number" id="a4FieldFontSize" class="form-control" min="8" max="40" placeholder="Default"></div>
-                    <div><label>Font Color</label><input type="color" id="a4FieldFontColor" class="form-control" value="#000000"></div>
+                    <div><label>Label Color</label><input type="color" id="a4FieldLabelFontColor" class="form-control" value="#000000"></div>
+                    <div><label>Value Color</label><input type="color" id="a4FieldValueFontColor" class="form-control" value="#000000"></div>
                     <div><label>Label Width</label><input type="number" id="a4FieldLabelWidth" class="form-control" min="0" max="350" placeholder="Default"></div>
                     <div><label>Label Align</label><select id="a4FieldLabelAlign" class="form-control"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
                     <div><label>Value Align</label><select id="a4FieldValueAlign" class="form-control"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
+                    <div style="grid-column:1 / -1;"><label>Display Condition</label><input type="text" id="a4FieldCondition" class="form-control" placeholder="Example: color = red or stone_wt1 &gt; 7"></div>
                 </div>
                 <button type="button" id="clearA4FieldStyle" class="btn btn-default btn-wide" style="margin-top:10px;">Use Global Text Style</button>
             </div>
@@ -223,6 +298,7 @@ var selectedA4FieldKeys = [];
 var a4GroupDragStart = {};
 var a4PrimaryDragStart = null;
 var selectedExtraImageId = null;
+var selectedExtraTextId = null;
 function sx(v){ return v * viewW / baseW; } function sy(v){ return v * viewH / baseH; }
 function ux(v){ return Math.round(v * baseW / viewW); } function uy(v){ return Math.round(v * baseH / viewH); }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
@@ -242,6 +318,10 @@ function applyA4Orientation(){
 }
 function a4FieldFontSize(f){ return f.fontSize || $("#fontSize").val() || 15; }
 function a4FieldFontColor(f){ return f.fontColor || $("#fontColor").val() || "#000000"; }
+function a4FieldLabelFontColor(f){ return f.labelFontColor || f.fontColor || $("#fontColor").val() || "#000000"; }
+function a4FieldValueFontColor(f){ return f.valueFontColor || f.fontColor || $("#fontColor").val() || "#000000"; }
+function a4FieldLabelFontFamily(f){ return f.labelFontFamily || f.fontFamily || $("#fontFamily").val() || "Arial"; }
+function a4FieldValueFontFamily(f){ return f.valueFontFamily || f.fontFamily || $("#fontFamily").val() || "Arial"; }
 function a4FieldLabelWidth(f){ return f.labelWidth || $("#labelWidth").val() || 140; }
 function a4FieldFontFamily(f){ return f.fontFamily || $("#fontFamily").val() || "Arial"; }
 function a4AlignValue(value){ return value === "center" || value === "right" ? value : "left"; }
@@ -251,6 +331,9 @@ function appendA4FontOption(font){
     if (!$("#fontFamily option[value='"+font.family.replace(/'/g, "\\'")+"']").length) {
         $("#fontFamily").append($("<option></option>").val(font.family).text(label));
         $("#a4FieldFontFamily").append($("<option></option>").val(font.family).text(label));
+        $("#a4FieldLabelFontFamily").append($("<option></option>").val(font.family).text(label));
+        $("#a4FieldValueFontFamily").append($("<option></option>").val(font.family).text(label));
+        $("#extraTextFontFamily").append($("<option></option>").val(font.family).text(label));
     }
     if (font.src && !$("style[data-font-family='"+font.family.replace(/'/g, "\\'")+"']").length) {
         $("<style></style>").attr("data-font-family", font.family).text("@font-face{font-family:'"+font.family.replace(/'/g, "\\'")+"';src:url('"+font.src+"?v="+Date.now()+"') format('truetype');font-weight:300 700;font-style:normal;font-display:swap}").appendTo("head");
@@ -268,8 +351,8 @@ function applyA4FieldStyle(key){
     var labelW = f.showLabel === "none" ? 0 : sx(a4FieldLabelWidth(f));
     var gap = f.showLabel === "none" ? 0 : sx(12);
     var valueW = isTick ? Math.max(4, el.innerWidth()) : Math.max(10, el.innerWidth() - labelW - gap);
-    el.find(".a4-label").text(f.label || "").css({width:labelW+"px",display:f.showLabel === "none" ? "none" : "inline-block",textAlign:a4AlignValue(f.labelAlign),fontWeight:f.labelFontWeight === "bold" ? "700" : "300",textShadow:f.labelFontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
-    el.find(".a4-value").text(f.valueType === "tick" ? "✓" : ((f.showLabel === "none" || f.showColon === "none" ? "" : ": ") + "Sample")).css({width:valueW+"px",textAlign:a4AlignValue(f.valueAlign),fontFamily:f.valueType === "tick" ? "'Segoe UI Symbol','Arial Unicode MS','DejaVu Sans',Arial,sans-serif" : "inherit",fontWeight:f.fontWeight === "bold" ? "700" : "300",textShadow:f.fontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
+    el.find(".a4-label").text(f.label || "").css({width:labelW+"px",display:f.showLabel === "none" ? "none" : "inline-block",textAlign:a4AlignValue(f.labelAlign),color:a4FieldLabelFontColor(f),fontFamily:a4FieldLabelFontFamily(f),fontWeight:f.labelFontWeight === "bold" ? "700" : "300",textShadow:f.labelFontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
+    el.find(".a4-value").text(f.valueType === "tick" ? "✓" : ((f.showLabel === "none" || f.showColon === "none" ? "" : ": ") + "Sample")).css({width:valueW+"px",textAlign:a4AlignValue(f.valueAlign),color:a4FieldValueFontColor(f),fontFamily:f.valueType === "tick" ? "'Segoe UI Symbol','Arial Unicode MS','DejaVu Sans',Arial,sans-serif" : a4FieldValueFontFamily(f),fontWeight:f.fontWeight === "bold" ? "700" : "300",textShadow:f.fontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
     if (!isTick) {
         var boxW = Math.max(4, el.innerWidth());
         var desiredLabelW = f.showLabel === "none" ? 0 : sx(a4FieldLabelWidth(f));
@@ -290,7 +373,7 @@ function applyA4TickSizing(key){
     var size = manualFontSize > 0 ? Math.min(manualFontSize, tickFitSize) : tickFitSize;
     el.addClass("a4-tick-field").css({fontSize:size+"px",lineHeight:el.innerHeight()+"px"});
     el.find(".a4-label").hide();
-    el.find(".a4-value").text("\u2713").css({width:Math.max(4, el.innerWidth())+"px",height:el.innerHeight()+"px",lineHeight:el.innerHeight()+"px",textAlign:"center"});
+    el.find(".a4-value").text("\u2713").css({width:Math.max(4, el.innerWidth())+"px",height:el.innerHeight()+"px",lineHeight:el.innerHeight()+"px",textAlign:"center",color:a4FieldValueFontColor(f)});
 }
 function extraImageById(id){
     var found = null;
@@ -334,6 +417,91 @@ function renderExtraImageList(){
         row.append(btn);
         list.append(row);
     });
+}
+function extraTextById(id){
+    var found = null;
+    $.each(a4Settings.additionalTexts || [], function(_, item){ if(String(item.id) === String(id)) found = item; });
+    return found;
+}
+function initExtraTextBox(el){
+    $(el).draggable({containment:"#a4Canvas"}).resizable({containment:"#a4Canvas"}).on("click", function(event){
+        event.stopPropagation();
+        selectExtraText($(this).data("id"));
+    });
+}
+function applyExtraTextBoxStyle(box, item){
+    box.text(item.text || "Additional Text").css({
+        left:sx(item.x || 40),
+        top:sy(item.y || 40),
+        width:sx(item.w || 180),
+        height:sy(item.h || 40),
+        display:item.display || "block",
+        fontFamily:item.fontFamily || $("#fontFamily").val() || "Arial",
+        fontSize:(item.fontSize || 12)+"px",
+        color:item.fontColor || "#000000",
+        fontWeight:item.fontWeight === "bold" ? "700" : "300",
+        textAlign:a4AlignValue(item.align)
+    });
+}
+function renderExtraTexts(){
+    $(".a4-extra-text").remove();
+    $.each(a4Settings.additionalTexts || [], function(_, item){
+        var box = $('<div class="a4-draggable a4-extra-text" data-id=""></div>').attr("data-id", item.id);
+        $("#a4Canvas").append(box);
+        applyExtraTextBoxStyle(box, item);
+        initExtraTextBox(box);
+    });
+    renderExtraTextList();
+}
+function renderExtraTextList(){
+    var list = $("#extraTextsList").empty();
+    var texts = a4Settings.additionalTexts || [];
+    if (!texts.length) { list.append('<div class="text-muted" style="font-size:12px;">No additional text added.</div>'); return; }
+    $.each(texts, function(index, item){
+        var row = $('<div class="field-row"></div>');
+        row.append($("<label></label>").text((item.text || "Text").substring(0, 28)));
+        var btn = $('<button type="button" class="btn btn-default btn-mini">Select</button>').toggleClass("btn-primary", String(item.id) === String(selectedExtraTextId));
+        btn.on("click", function(){ selectExtraText(item.id); });
+        row.append(btn);
+        list.append(row);
+    });
+}
+function selectExtraText(id){
+    selectedExtraTextId = id ? String(id) : null;
+    $(".a4-extra-text").removeClass("a4-extra-selected");
+    if (selectedExtraTextId) $(".a4-extra-text[data-id='"+selectedExtraTextId+"']").addClass("a4-extra-selected");
+    var item = extraTextById(selectedExtraTextId) || {};
+    $("#extraTextContent").val(item.text || "");
+    $("#extraTextFontFamily").val(item.fontFamily || "");
+    $("#extraTextFontSize").val(item.fontSize || 12);
+    $("#extraTextFontColor").val(item.fontColor || "#000000");
+    $("#extraTextFontWeight").val(item.fontWeight === "bold" ? "bold" : "normal");
+    $("#extraTextAlign").val(a4AlignValue(item.align));
+    $("#extraTextDisplay").val(item.display || "block");
+    $("#extraTextCondition").val(item.condition || "");
+    renderExtraTextList();
+}
+function syncExtraTextGeometry(item){
+    var box = $(".a4-extra-text[data-id='"+item.id+"']");
+    if (!box.length) return;
+    var p = box.position();
+    item.x = ux(p.left);
+    item.y = uy(p.top);
+    item.w = ux(box.outerWidth());
+    item.h = uy(box.outerHeight());
+}
+function applyExtraTextEditor(item){
+    item.text = $("#extraTextContent").val().trim() || "Additional Text";
+    item.fontFamily = $("#extraTextFontFamily").val() || "";
+    item.fontSize = parseFloat($("#extraTextFontSize").val()) || 12;
+    item.fontColor = $("#extraTextFontColor").val() || "#000000";
+    item.fontWeight = $("#extraTextFontWeight").val() === "bold" ? "bold" : "normal";
+    item.align = a4AlignValue($("#extraTextAlign").val());
+    item.display = $("#extraTextDisplay").val() || "block";
+    item.condition = $("#extraTextCondition").val().trim();
+    var box = $(".a4-extra-text[data-id='"+item.id+"']");
+    if (box.length) applyExtraTextBoxStyle(box, item);
+    renderExtraTextList();
 }
 function syncA4FieldGeometry(key){
     var el = a4FieldElement(key), f = a4Settings.fields[key];
@@ -391,11 +559,15 @@ function selectA4Field(key, additive){
     $("#a4FieldLabelFontWeight").val(f.labelFontWeight === "bold" ? "bold" : "normal");
     $("#a4FieldFontWeight").val(f.fontWeight === "bold" ? "bold" : "normal");
     $("#a4FieldFontFamily").val(f.fontFamily || "");
+    $("#a4FieldLabelFontFamily").val(f.labelFontFamily || "");
+    $("#a4FieldValueFontFamily").val(f.valueFontFamily || "");
     $("#a4FieldFontSize").val(f.fontSize || "");
-    $("#a4FieldFontColor").val(f.fontColor || $("#fontColor").val() || "#000000");
+    $("#a4FieldLabelFontColor").val(f.labelFontColor || f.fontColor || $("#fontColor").val() || "#000000");
+    $("#a4FieldValueFontColor").val(f.valueFontColor || f.fontColor || $("#fontColor").val() || "#000000");
     $("#a4FieldLabelWidth").val(f.labelWidth || "");
     $("#a4FieldLabelAlign").val(a4AlignValue(f.labelAlign));
     $("#a4FieldValueAlign").val(a4AlignValue(f.valueAlign));
+    $("#a4FieldCondition").val(f.condition || "");
 }
 function applyA4FieldPosition(){
     var key = selectedA4FieldKey;
@@ -445,16 +617,23 @@ function applySelectedA4FieldStyle(){
     f.labelFontWeight = $("#a4FieldLabelFontWeight").val() === "bold" ? "bold" : "normal";
     f.fontWeight = $("#a4FieldFontWeight").val() === "bold" ? "bold" : "normal";
     f.fontFamily = $("#a4FieldFontFamily").val() || "";
+    f.labelFontFamily = $("#a4FieldLabelFontFamily").val() || "";
+    f.valueFontFamily = $("#a4FieldValueFontFamily").val() || "";
     f.fontSize = $("#a4FieldFontSize").val() ? parseFloat($("#a4FieldFontSize").val()) : null;
-    f.fontColor = $("#a4FieldFontColor").val();
+    f.labelFontColor = $("#a4FieldLabelFontColor").val();
+    f.valueFontColor = $("#a4FieldValueFontColor").val();
     f.labelWidth = $("#a4FieldLabelWidth").val() ? parseFloat($("#a4FieldLabelWidth").val()) : null;
     f.labelAlign = a4AlignValue($("#a4FieldLabelAlign").val());
     f.valueAlign = a4AlignValue($("#a4FieldValueAlign").val());
+    f.condition = $("#a4FieldCondition").val().trim();
     applyA4FieldStyle(selectedA4FieldKey);
     $(".field-display[data-key='"+selectedA4FieldKey+"']").closest(".field-row").find("label").text(f.label);
 }
 function applyA4Settings(){
     applyA4Orientation();
+    if (!a4Settings.symbolKey) a4Settings.symbolKey = {display:"none",x:440,y:305,w:250,h:140,fontSize:10};
+    if (!a4Settings.proportionImage) a4Settings.proportionImage = {display:"none",x:735,y:90,w:150,h:110};
+    if (!a4Settings.clarityImage) a4Settings.clarityImage = {display:"none",x:890,y:90,w:150,h:110};
     $("#fontFamily").val(a4Settings.fontFamily || "Arial");
     $("#fontSize").val(a4Settings.fontSize || 15);
     $("#fontColor").val(a4Settings.fontColor || "#000000");
@@ -469,21 +648,74 @@ function applyA4Settings(){
         applyA4FieldStyle(key);
     });
     $("#a4Stone").css({left:sx(a4Settings.stoneImage.x),top:sy(a4Settings.stoneImage.y),width:sx(a4Settings.stoneImage.w),height:sy(a4Settings.stoneImage.h),display:a4Settings.stoneImage.display});
+    $("#a4Proportion").css({left:sx(a4Settings.proportionImage.x),top:sy(a4Settings.proportionImage.y),width:sx(a4Settings.proportionImage.w),height:sy(a4Settings.proportionImage.h),display:a4Settings.proportionImage.display});
+    $("#a4Clarity").css({left:sx(a4Settings.clarityImage.x),top:sy(a4Settings.clarityImage.y),width:sx(a4Settings.clarityImage.w),height:sy(a4Settings.clarityImage.h),display:a4Settings.clarityImage.display});
+    $("#a4SymbolKey").css({left:sx(a4Settings.symbolKey.x),top:sy(a4Settings.symbolKey.y),width:sx(a4Settings.symbolKey.w),height:sy(a4Settings.symbolKey.h),display:a4Settings.symbolKey.display,fontSize:(a4Settings.symbolKey.fontSize || 10)+"px"});
     $("#a4Qr").css({left:sx(a4Settings.qrCode.x),top:sy(a4Settings.qrCode.y),width:sx(a4Settings.qrCode.w),height:sy(a4Settings.qrCode.h),display:a4Settings.qrCode.display});
-    $("#stoneDisplay").val(a4Settings.stoneImage.display || "block"); $("#qrDisplay").val(a4Settings.qrCode.display || "block");
+    $("#stoneDisplay").val(a4Settings.stoneImage.display || "block");
+    $("#proportionDisplay").val(a4Settings.proportionImage.display || "none");
+    $("#clarityDisplay").val(a4Settings.clarityImage.display || "none");
+    $("#symbolKeyDisplay").val(a4Settings.symbolKey.display || "none");
+    $("#symbolKeyX").val(a4Settings.symbolKey.x || 0);
+    $("#symbolKeyY").val(a4Settings.symbolKey.y || 0);
+    $("#symbolKeyW").val(a4Settings.symbolKey.w || 0);
+    $("#symbolKeyH").val(a4Settings.symbolKey.h || 0);
+    $("#symbolKeyFontSize").val(a4Settings.symbolKey.fontSize || 10);
+    $("#qrDisplay").val(a4Settings.qrCode.display || "block");
     renderExtraImages();
+    renderExtraTexts();
+}
+function syncA4SymbolKeyGeometry(){
+    if (!a4Settings.symbolKey) a4Settings.symbolKey = {display:"none",x:440,y:305,w:250,h:140,fontSize:10};
+    var el = $("#a4SymbolKey"), p = el.position();
+    a4Settings.symbolKey.x = ux(p.left);
+    a4Settings.symbolKey.y = uy(p.top);
+    a4Settings.symbolKey.w = ux(el.outerWidth());
+    a4Settings.symbolKey.h = uy(el.outerHeight());
+    $("#symbolKeyX").val(Math.round(a4Settings.symbolKey.x));
+    $("#symbolKeyY").val(Math.round(a4Settings.symbolKey.y));
+    $("#symbolKeyW").val(Math.round(a4Settings.symbolKey.w));
+    $("#symbolKeyH").val(Math.round(a4Settings.symbolKey.h));
+}
+function applyA4SymbolKeyBox(){
+    if (!a4Settings.symbolKey) a4Settings.symbolKey = {display:"none",x:440,y:305,w:250,h:140,fontSize:10};
+    a4Settings.symbolKey.display = $("#symbolKeyDisplay").val() || "none";
+    a4Settings.symbolKey.x = parseFloat($("#symbolKeyX").val()) || 0;
+    a4Settings.symbolKey.y = parseFloat($("#symbolKeyY").val()) || 0;
+    a4Settings.symbolKey.w = Math.max(40, parseFloat($("#symbolKeyW").val()) || 250);
+    a4Settings.symbolKey.h = Math.max(30, parseFloat($("#symbolKeyH").val()) || 140);
+    a4Settings.symbolKey.fontSize = Math.max(6, Math.min(24, parseFloat($("#symbolKeyFontSize").val()) || 10));
+    $("#a4SymbolKey").css({left:sx(a4Settings.symbolKey.x),top:sy(a4Settings.symbolKey.y),width:sx(a4Settings.symbolKey.w),height:sy(a4Settings.symbolKey.h),display:a4Settings.symbolKey.display,fontSize:a4Settings.symbolKey.fontSize+"px"});
+}
+function a4BoxGeometry(selector){
+    var el = $(selector), p = el.position();
+    var left = parseFloat(el.css("left"));
+    var top = parseFloat(el.css("top"));
+    return {
+        x: ux(isNaN(left) ? p.left : left),
+        y: uy(isNaN(top) ? p.top : top),
+        w: ux(el.outerWidth()),
+        h: uy(el.outerHeight())
+    };
 }
 function collectA4Settings(){
-    var data = {orientation:$("#a4Orientation").val(),backgroundImage:a4Settings.backgroundImage,fontFamily:$("#fontFamily").val(),fontSize:$("#fontSize").val(),fontColor:$("#fontColor").val(),labelWidth:$("#labelWidth").val(),fields:{},stoneImage:{},qrCode:{},additionalImages:[]};
-    $(".a4-field").each(function(){ var key=$(this).data("key"), p=$(this).position(), f=a4Settings.fields[key]; data.fields[key]={label:f.label,column:f.column,valueType:f.valueType || "",display:$(".field-display[data-key='"+key+"']").val(),showLabel:f.showLabel || "block",showColon:f.showColon === "none" ? "none" : "block",labelFontWeight:f.labelFontWeight === "bold" ? "bold" : "normal",fontWeight:f.fontWeight === "bold" ? "bold" : "normal",fontFamily:f.fontFamily || "",fontSize:f.fontSize || "",fontColor:f.fontColor || "",labelWidth:f.labelWidth || "",labelAlign:a4AlignValue(f.labelAlign),valueAlign:a4AlignValue(f.valueAlign),x:ux(p.left),y:uy(p.top),w:ux($(this).outerWidth()),h:uy($(this).outerHeight())}; });
-    var sp=$("#a4Stone").position(); data.stoneImage={display:$("#stoneDisplay").val(),x:ux(sp.left),y:uy(sp.top),w:ux($("#a4Stone").outerWidth()),h:uy($("#a4Stone").outerHeight())};
-    var qp=$("#a4Qr").position(); data.qrCode={display:$("#qrDisplay").val(),x:ux(qp.left),y:uy(qp.top),w:ux($("#a4Qr").outerWidth()),h:uy($("#a4Qr").outerHeight())};
+    var data = {orientation:$("#a4Orientation").val(),backgroundImage:a4Settings.backgroundImage,fontFamily:$("#fontFamily").val(),fontSize:$("#fontSize").val(),fontColor:$("#fontColor").val(),labelWidth:$("#labelWidth").val(),fields:{},stoneImage:{},proportionImage:{},clarityImage:{},symbolKey:{},qrCode:{},additionalImages:[],additionalTexts:[]};
+    $(".a4-field").each(function(){ var key=$(this).data("key"), p=$(this).position(), f=a4Settings.fields[key]; data.fields[key]={label:f.label,column:f.column,valueType:f.valueType || "",display:$(".field-display[data-key='"+key+"']").val(),showLabel:f.showLabel || "block",showColon:f.showColon === "none" ? "none" : "block",labelFontWeight:f.labelFontWeight === "bold" ? "bold" : "normal",fontWeight:f.fontWeight === "bold" ? "bold" : "normal",fontFamily:f.fontFamily || "",labelFontFamily:f.labelFontFamily || "",valueFontFamily:f.valueFontFamily || "",fontSize:f.fontSize || "",fontColor:f.fontColor || "",labelFontColor:f.labelFontColor || "",valueFontColor:f.valueFontColor || "",labelWidth:f.labelWidth || "",labelAlign:a4AlignValue(f.labelAlign),valueAlign:a4AlignValue(f.valueAlign),condition:f.condition || "",x:ux(p.left),y:uy(p.top),w:ux($(this).outerWidth()),h:uy($(this).outerHeight())}; });
+    var sg=a4BoxGeometry("#a4Stone"); data.stoneImage={display:$("#stoneDisplay").val(),x:sg.x,y:sg.y,w:sg.w,h:sg.h};
+    var pg=a4BoxGeometry("#a4Proportion"); data.proportionImage={display:$("#proportionDisplay").val(),x:pg.x,y:pg.y,w:pg.w,h:pg.h};
+    var cg=a4BoxGeometry("#a4Clarity"); data.clarityImage={display:$("#clarityDisplay").val(),x:cg.x,y:cg.y,w:cg.w,h:cg.h};
+    var skg=a4BoxGeometry("#a4SymbolKey"); data.symbolKey={display:$("#symbolKeyDisplay").val(),x:skg.x,y:skg.y,w:skg.w,h:skg.h,fontSize:$("#symbolKeyFontSize").val() || 10};
+    var qg=a4BoxGeometry("#a4Qr"); data.qrCode={display:$("#qrDisplay").val(),x:qg.x,y:qg.y,w:qg.w,h:qg.h};
     $(".a4-extra-image").each(function(index){
         var id = String($(this).data("id"));
         var img = extraImageById(id);
         if (!img) return;
         var p = $(this).position();
         data.additionalImages.push({id:id,label:img.label || ("Image " + (index + 1)),src:img.src,display:$(this).css("display")==="none"?"none":"block",x:ux(p.left),y:uy(p.top),w:ux($(this).outerWidth()),h:uy($(this).outerHeight())});
+    });
+    $.each(a4Settings.additionalTexts || [], function(_, item){
+        syncExtraTextGeometry(item);
+        data.additionalTexts.push($.extend({}, item));
     });
     return data;
 }
@@ -524,6 +756,8 @@ $(function(){
             if ($(this).hasClass("a4-field")) {
                 $.each(selectedA4FieldKeys, function(_, key){ syncA4FieldGeometry(key); });
                 updateA4PositionInputs();
+            } else if ($(this).attr("id") === "a4SymbolKey") {
+                syncA4SymbolKeyGeometry();
             }
             a4GroupDragStart = {};
             a4PrimaryDragStart = null;
@@ -540,6 +774,8 @@ $(function(){
                 syncA4FieldGeometry(String($(this).data("key")));
                 applyA4FieldStyle(String($(this).data("key")));
                 updateA4PositionInputs();
+            } else if ($(this).attr("id") === "a4SymbolKey") {
+                syncA4SymbolKeyGeometry();
             }
         }
     });
@@ -547,18 +783,23 @@ $(function(){
     selectA4Field($(".a4-field").first().data("key"));
     $(".a4-field").on("click", function(event){ selectA4Field($(this).data("key"), event.ctrlKey || event.shiftKey || event.metaKey); });
     $(".field-row label").on("click", function(){ var key=$(this).siblings(".field-display").data("key"); if(key) selectA4Field(key); });
-    $("#fontFamily,#fontSize,#fontColor,#labelWidth").on("input change", function(){ $(".a4-draggable").css({fontFamily:$("#fontFamily").val()}); $.each(a4Settings.fields, function(key){ applyA4FieldStyle(key); }); });
+    $("#fontFamily,#fontSize,#fontColor,#labelWidth").on("input change", function(){ $(".a4-draggable").css({fontFamily:$("#fontFamily").val()}); $.each(a4Settings.fields, function(key){ applyA4FieldStyle(key); }); renderExtraTexts(); });
     $("#a4Orientation").on("change", function(){ a4Settings.orientation=$(this).val(); applyA4Settings(); });
-    $("#a4FieldLabelText,#a4FieldShowLabel,#a4FieldShowColon,#a4FieldLabelFontWeight,#a4FieldFontWeight,#a4FieldFontFamily,#a4FieldFontSize,#a4FieldFontColor,#a4FieldLabelWidth,#a4FieldLabelAlign,#a4FieldValueAlign").on("input change", applySelectedA4FieldStyle);
+    $("#a4FieldLabelText,#a4FieldShowLabel,#a4FieldShowColon,#a4FieldLabelFontWeight,#a4FieldFontWeight,#a4FieldFontFamily,#a4FieldLabelFontFamily,#a4FieldValueFontFamily,#a4FieldFontSize,#a4FieldLabelFontColor,#a4FieldValueFontColor,#a4FieldLabelWidth,#a4FieldLabelAlign,#a4FieldValueAlign,#a4FieldCondition").on("input change", applySelectedA4FieldStyle);
     $("#applyA4FieldPosition").on("click", applyA4FieldPosition);
     $("#a4FieldX,#a4FieldY,#a4FieldW,#a4FieldH").on("change", applyA4FieldPosition).on("keydown", function(event){ if(event.key === "Enter"){ event.preventDefault(); applyA4FieldPosition(); } });
     $("#nudgeA4Selected").on("click", function(){ moveA4Selected(parseFloat($("#a4NudgeX").val()) || 0, parseFloat($("#a4NudgeY").val()) || 0); });
     $("#selectAllA4Fields").on("click", function(){ var keys = visibleA4FieldKeys(); if(keys.length) { selectA4Field(keys[0]); setA4Selection(keys, keys[0]); } });
     $("#clearA4Selection").on("click", function(){ if(selectedA4FieldKey) setA4Selection([selectedA4FieldKey], selectedA4FieldKey); });
     $("#alignA4SelectedLeft").on("click", alignA4SelectedLeft);
-    $("#clearA4FieldStyle").on("click", function(){ if(!selectedA4FieldKey) return; var f=a4Settings.fields[selectedA4FieldKey]; f.showLabel="block"; f.showColon="block"; f.labelFontWeight="normal"; f.fontWeight="normal"; f.fontFamily=""; f.fontSize=null; f.fontColor=""; f.labelWidth=null; f.labelAlign="left"; f.valueAlign="left"; selectA4Field(selectedA4FieldKey); applyA4FieldStyle(selectedA4FieldKey); });
+    $("#clearA4FieldStyle").on("click", function(){ if(!selectedA4FieldKey) return; var f=a4Settings.fields[selectedA4FieldKey]; f.showLabel="block"; f.showColon="block"; f.labelFontWeight="normal"; f.fontWeight="normal"; f.fontFamily=""; f.labelFontFamily=""; f.valueFontFamily=""; f.fontSize=null; f.fontColor=""; f.labelFontColor=""; f.valueFontColor=""; f.labelWidth=null; f.labelAlign="left"; f.valueAlign="left"; f.condition=""; selectA4Field(selectedA4FieldKey); applyA4FieldStyle(selectedA4FieldKey); });
     $(".field-display").on("change", function(){ $("#field_"+$(this).data("key")).toggle($(this).val() !== "none"); updateA4PositionInputs(); });
     $("#stoneDisplay").on("change", function(){ $("#a4Stone").toggle($(this).val() !== "none"); });
+    $("#proportionDisplay").on("change", function(){ $("#a4Proportion").toggle($(this).val() !== "none"); });
+    $("#clarityDisplay").on("change", function(){ $("#a4Clarity").toggle($(this).val() !== "none"); });
+    $("#symbolKeyDisplay").on("change", function(){ if (!a4Settings.symbolKey) a4Settings.symbolKey = {}; a4Settings.symbolKey.display = $(this).val(); $("#a4SymbolKey").toggle($(this).val() !== "none"); });
+    $("#symbolKeyX,#symbolKeyY,#symbolKeyW,#symbolKeyH,#symbolKeyFontSize").on("input change", applyA4SymbolKeyBox);
+    $("#applySymbolKeyBox").on("click", applyA4SymbolKeyBox);
     $("#qrDisplay").on("change", function(){ $("#a4Qr").toggle($(this).val() !== "none"); });
     $("#uploadFont").on("click", function(){
         var file = $("#fontUpload")[0].files[0];
@@ -597,6 +838,29 @@ $(function(){
         a4Settings.additionalImages = $.grep(a4Settings.additionalImages || [], function(img){ return String(img.id) !== String(selectedExtraImageId); });
         selectedExtraImageId = null;
         renderExtraImages();
+    });
+    $("#addExtraText").on("click", function(){
+        if (!a4Settings.additionalTexts) a4Settings.additionalTexts = [];
+        var item = {id:"txt_"+Date.now(),text:$("#extraTextContent").val().trim() || "Additional Text",display:"block",condition:"",fontFamily:$("#extraTextFontFamily").val() || "",fontSize:parseFloat($("#extraTextFontSize").val()) || 12,fontColor:$("#extraTextFontColor").val() || "#000000",fontWeight:$("#extraTextFontWeight").val() === "bold" ? "bold" : "normal",align:a4AlignValue($("#extraTextAlign").val()),x:40,y:40,w:180,h:40};
+        item.condition = $("#extraTextCondition").val().trim();
+        item.display = $("#extraTextDisplay").val() || "block";
+        a4Settings.additionalTexts.push(item);
+        renderExtraTexts();
+        selectExtraText(item.id);
+    });
+    $("#updateExtraText,#extraTextContent,#extraTextFontFamily,#extraTextFontSize,#extraTextFontColor,#extraTextFontWeight,#extraTextAlign,#extraTextDisplay,#extraTextCondition").on("input change click", function(){
+        if (!selectedExtraTextId) return;
+        var item = extraTextById(selectedExtraTextId);
+        if (!item) return;
+        syncExtraTextGeometry(item);
+        applyExtraTextEditor(item);
+    });
+    $("#deleteExtraText").on("click", function(){
+        if (!selectedExtraTextId) return;
+        a4Settings.additionalTexts = $.grep(a4Settings.additionalTexts || [], function(item){ return String(item.id) !== String(selectedExtraTextId); });
+        selectedExtraTextId = null;
+        renderExtraTexts();
+        selectExtraText(null);
     });
     $("#saveA4Settings").on("click", function(){ $.post("save_a4_settings.php", {report_type:a4BuilderType,settings:JSON.stringify(collectA4Settings())}, function(resp){ alert(resp.message || "A4 settings saved."); }, "json").fail(function(){ alert("Unable to save A4 settings."); }); });
     $("#a4BuilderType").on("change", function(){ window.location.href="a4Settings.php?type="+encodeURIComponent(this.value); });

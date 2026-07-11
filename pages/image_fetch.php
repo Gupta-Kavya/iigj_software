@@ -1,16 +1,19 @@
 <?php
 require_once 'auth.php';
 auth_require_login();
+require_once 'db_connect.php';
 require_once 'atm_config.php';
 $input = preg_replace('/[^0-9]/', '', (string) ($_POST["input"] ?? ''));
 $uploadToken = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($_POST['upload_token'] ?? ''));
+$imageType = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($_POST['image_type'] ?? 'stone'));
+$folder = $imageType === 'proportion' ? 'proportion_images' : ($imageType === 'clarity' ? 'clarity_images' : 'st_images');
 // process the input data
 
-$pendingFile = $uploadToken !== '' ? atm_user_stone_dir() . "/_pending/$uploadToken.jpg" : '';
-$pendingUrl = $uploadToken !== '' ? atm_user_stone_relative("_pending/$uploadToken.jpg") : '';
-$file = atm_user_stone_dir() . "/$input.jpg";
-$url = atm_user_stone_relative("$input.jpg");
-$fallbackFile = isset($GLOBALS['conn']) ? atm_branch_stone_path_for_user($GLOBALS['conn'], auth_current_user_id(), $input) : '';
+$pendingFile = $uploadToken !== '' ? atm_user_image_dir($folder) . "/_pending/$uploadToken.jpg" : '';
+$pendingUrl = $uploadToken !== '' ? atm_user_image_relative("_pending/$uploadToken.jpg", $folder) : '';
+$file = atm_user_image_dir($folder) . "/$input.jpg";
+$url = atm_user_image_relative("$input.jpg", $folder);
+$fallbackFile = isset($GLOBALS['conn']) ? atm_branch_image_path_for_user($GLOBALS['conn'], auth_current_user_id(), $input, $folder) : '';
 $fallbackUrl = $fallbackFile !== ''
     ? str_replace('\\', '/', substr($fallbackFile, strlen(__DIR__) + 1))
     : '';

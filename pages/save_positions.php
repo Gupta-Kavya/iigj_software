@@ -50,6 +50,8 @@ foreach ($defaults['fields'] as $key => $fallback) {
     $label = trim((string) ($item['label'] ?? $fallback['label']));
     $showLabel = atm_display_value(isset($item['showLabel']) ? $item['showLabel'] : $fallback['showLabel']);
     $fontColor = isset($item['fontColor']) ? trim((string) $item['fontColor']) : '';
+    $labelFontColor = isset($item['labelFontColor']) ? trim((string) $item['labelFontColor']) : '';
+    $valueFontColor = isset($item['valueFontColor']) ? trim((string) $item['valueFontColor']) : '';
     $positions['fields'][$key] = [
         'label' => $label !== '' ? $label : $fallback['label'],
         'column' => $fallback['column'],
@@ -61,6 +63,8 @@ foreach ($defaults['fields'] as $key => $fallback) {
         'fontWeight' => isset($item['fontWeight']) && $item['fontWeight'] === 'bold' ? 'bold' : 'normal',
         'fontSize' => isset($item['fontSize']) && $item['fontSize'] !== '' ? atm_clamp($item['fontSize'], 4, 18) : null,
         'fontColor' => preg_match('/^#[0-9a-fA-F]{6}$/', $fontColor) ? strtoupper($fontColor) : '',
+        'labelFontColor' => preg_match('/^#[0-9a-fA-F]{6}$/', $labelFontColor) ? strtoupper($labelFontColor) : '',
+        'valueFontColor' => preg_match('/^#[0-9a-fA-F]{6}$/', $valueFontColor) ? strtoupper($valueFontColor) : '',
         'labelWidth' => isset($item['labelWidth']) && $item['labelWidth'] !== '' ? atm_clamp($item['labelWidth'], 0, 180) : null,
         'labelAlign' => $alignValue($item['labelAlign'] ?? ($fallback['labelAlign'] ?? 'left')),
         'valueAlign' => $alignValue($item['valueAlign'] ?? ($fallback['valueAlign'] ?? 'left')),

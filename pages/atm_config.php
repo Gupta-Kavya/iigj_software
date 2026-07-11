@@ -98,6 +98,7 @@ function atm_default_fields()
 function atm_field_definitions($type = 'S')
 {
     $type = atm_report_type($type);
+    $baseType = atm_base_report_type($type);
     $definitions = [
         'reportNo' => ['label' => 'Report No', 'column' => 'report_no'],
         'date' => ['label' => 'Date', 'column' => 'date'],
@@ -219,6 +220,7 @@ function atm_field_definitions($type = 'S')
         'ws5' => ['label' => 'WS5', 'column' => 'WS5'],
         'ws6' => ['label' => 'WS6', 'column' => 'WS6'],
         'ws7' => ['label' => 'WS7', 'column' => 'WS7'],
+        'diamondSymbols' => ['label' => 'Diamond Symbols JSON', 'column' => 'diamond_symbols_json'],
         'cr1' => ['label' => 'CR1', 'column' => 'cr1'],
         'cr2' => ['label' => 'CR2', 'column' => 'cr2'],
         'cr3' => ['label' => 'CR3', 'column' => 'cr3'],
@@ -249,7 +251,7 @@ function atm_field_definitions($type = 'S')
         'testTickUvImaging' => ['label' => 'UV Imaging Tick', 'column' => 'tuvimg', 'valueType' => 'tick'],
     ];
 
-    if ($type === 'J') {
+    if ($baseType === 'J') {
         $definitions['reportNo']['label'] = 'Report Number';
         $definitions['weight']['label'] = 'Gross Weight';
         $definitions['shapeCut']['label'] = 'Shape';
@@ -257,6 +259,39 @@ function atm_field_definitions($type = 'S')
         $definitions['remarks']['label'] = 'Comments';
         $definitions['face']['label'] = 'Diamond Pcs';
         $definitions['face']['column'] = 'stone_pcs';
+        $definitions['goldPurity']['label'] = 'Metal Type / Gold Purity';
+        for ($i = 1; $i <= 7; $i++) {
+            $definitions['cr' . $i]['label'] = 'Colour Stone Colour ' . $i;
+            $definitions['cs' . $i]['label'] = 'Colour Stone Name ' . $i;
+            $definitions['stoneWeight' . $i]['label'] = 'Colour Stone Weight ' . $i;
+        }
+    }
+    if ($baseType === 'D') {
+        $definitions['weight']['label'] = 'Carat Weight';
+        $definitions['weight']['column'] = 'diawt1';
+        $definitions['diamondWeight']['label'] = 'Carat Weight';
+        $definitions['diamondWeight']['column'] = 'diawt1';
+        $definitions['dimension']['label'] = 'Measurement';
+        $definitions['dimension']['column'] = 'dime1';
+        $definitions['tableValue']['column'] = 'table_size';
+        $definitions['pavilionDepth']['column'] = 'pavi_depth';
+        $definitions['fluorescence']['column'] = 'flurence';
+    }
+    if ($baseType === 'DS') {
+        $definitions['weight']['label'] = 'Total Weight';
+        $definitions['face']['label'] = 'Total Pcs';
+        $definitions['face']['column'] = 'pcs';
+        $definitions['pcs']['label'] = 'Total Pcs';
+        $definitions['testedPcs']['label'] = 'Total Pcs';
+        $definitions['shapeCut']['label'] = 'Shape And Cut';
+        $definitions['naturalDiamondWeight']['label'] = 'Natural Diamond Weight';
+        $definitions['syntheticDiamondWeight']['label'] = 'Synthetic Diamond Weight';
+        $definitions['referenceDiamondWeight']['label'] = 'Referal Weight';
+        $definitions['nonDiamondWeight']['label'] = 'Non Diamond Weight';
+        $definitions['naturalDiamondPcs']['label'] = 'Natural Diamond Pcs';
+        $definitions['syntheticDiamondPcs']['label'] = 'Synthetic Diamond Pcs';
+        $definitions['referenceDiamondPcs']['label'] = 'Referal Pcs';
+        $definitions['nonDiamondPcs']['label'] = 'Non Diamond Pcs';
     }
 
     return $definitions;
@@ -313,27 +348,50 @@ function atm_branch_user_file_for_user($conn, $userId, $filename)
     return __DIR__ . '/user_data/' . user_branch_storage_code($conn, $userId) . '/' . basename($filename);
 }
 
-function atm_branch_stone_path_for_user($conn, $userId, $certiNo, $extensions = ['jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG'])
+function atm_branch_image_path_for_user($conn, $userId, $certiNo, $folder = 'st_images', $extensions = ['jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG'])
 {
-    $certiNo = preg_replace('/[^0-9A-Za-z_-]/', '', (string) $certiNo);
-    if ($certiNo === '') {
+    $rawName = trim((string) $certiNo);
+    $rawName = preg_replace('/[^0-9A-Za-z _.-]/', '', $rawName);
+    if ($rawName === '') {
         return '';
+    }
+    $nameCandidates = array_values(array_unique(array_filter([
+        $rawName,
+        str_replace(' ', '_', $rawName),
+        str_replace(' ', '-', $rawName),
+        preg_replace('/[^0-9A-Za-z_-]/', '', $rawName),
+        strtolower($rawName),
+        strtolower(str_replace(' ', '_', $rawName)),
+        strtolower(str_replace(' ', '-', $rawName)),
+    ], function ($name) {
+        return trim((string) $name) !== '';
+    })));
+    $folder = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $folder);
+    if ($folder === '') {
+        $folder = 'st_images';
     }
     $storageCode = user_branch_storage_code($conn, $userId);
     $dirs = [
-        __DIR__ . '/user_data/' . $storageCode . '/st_images',
-        __DIR__ . '/user_data/user_' . (int) $userId . '/st_images',
-        __DIR__ . '/assets/st_images',
+        __DIR__ . '/user_data/' . $storageCode . '/' . $folder,
+        __DIR__ . '/user_data/user_' . (int) $userId . '/' . $folder,
+        __DIR__ . '/assets/' . $folder,
     ];
     foreach ($dirs as $dir) {
-        foreach ($extensions as $ext) {
-            $path = $dir . '/' . $certiNo . '.' . $ext;
-            if (is_file($path)) {
-                return $path;
+        foreach ($nameCandidates as $name) {
+            foreach ($extensions as $ext) {
+                $path = $dir . '/' . $name . '.' . $ext;
+                if (is_file($path)) {
+                    return $path;
+                }
             }
         }
     }
     return '';
+}
+
+function atm_branch_stone_path_for_user($conn, $userId, $certiNo, $extensions = ['jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG'])
+{
+    return atm_branch_image_path_for_user($conn, $userId, $certiNo, 'st_images', $extensions);
 }
 
 function atm_read_json_direct($filename, $defaults)
@@ -470,7 +528,16 @@ function atm_normalize_additional_images($images, $maxX, $maxY, $defaultW = 80, 
 
 function atm_user_stone_dir()
 {
-    $dir = atm_user_dir() . '/st_images';
+    return atm_user_image_dir('st_images');
+}
+
+function atm_user_image_dir($folder = 'st_images')
+{
+    $folder = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $folder);
+    if ($folder === '') {
+        $folder = 'st_images';
+    }
+    $dir = atm_user_dir() . '/' . $folder;
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
@@ -479,9 +546,18 @@ function atm_user_stone_dir()
 
 function atm_user_stone_relative($filename)
 {
+    return atm_user_image_relative($filename, 'st_images');
+}
+
+function atm_user_image_relative($filename, $folder = 'st_images')
+{
     $userId = auth_current_user_id();
     $storageCode = isset($GLOBALS['conn']) ? user_branch_storage_code($GLOBALS['conn'], $userId) : ('user_' . $userId);
-    return 'user_data/' . $storageCode . '/st_images/' . $filename;
+    $folder = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $folder);
+    if ($folder === '') {
+        $folder = 'st_images';
+    }
+    return 'user_data/' . $storageCode . '/' . $folder . '/' . $filename;
 }
 
 function atm_display_value($value)
@@ -492,16 +568,31 @@ function atm_display_value($value)
 function atm_report_type($type)
 {
     $type = strtoupper((string) $type);
-    if (preg_match('/^CS[0-9]+$/', $type)) {
+    if (preg_match('/^(CS|PR|JT|DS|DG)[0-9]+$/', $type)) {
         return $type;
     }
-    return in_array($type, ['D', 'J', 'R'], true) ? $type : 'S';
+    return in_array($type, ['D', 'J', 'DS', 'R', 'P'], true) ? $type : 'S';
 }
 
 function atm_base_report_type($type)
 {
     $type = atm_report_type($type);
-    return preg_match('/^CS[0-9]+$/', $type) ? 'S' : $type;
+    if (preg_match('/^CS[0-9]+$/', $type)) {
+        return 'S';
+    }
+    if (preg_match('/^PR[0-9]+$/', $type)) {
+        return 'P';
+    }
+    if (preg_match('/^JT[0-9]+$/', $type)) {
+        return 'J';
+    }
+    if (preg_match('/^DS[0-9]+$/', $type)) {
+        return 'DS';
+    }
+    if (preg_match('/^DG[0-9]+$/', $type)) {
+        return 'D';
+    }
+    return $type;
 }
 
 function cstone_report_type_master_ready($conn)
@@ -509,13 +600,14 @@ function cstone_report_type_master_ready($conn)
     $ready = (bool) @$conn->query("CREATE TABLE IF NOT EXISTS `sm_colour_stone_report_types` (
         `id` int(11) NOT NULL AUTO_INCREMENT,
         `user_id` int(11) NOT NULL DEFAULT 1,
+        `base_type` varchar(2) NOT NULL DEFAULT 'S',
         `report_name` varchar(160) NOT NULL,
         `report_format` varchar(20) NOT NULL DEFAULT 'a4',
         `active` tinyint(1) NOT NULL DEFAULT 1,
         `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
         `updated_at` datetime DEFAULT NULL,
         PRIMARY KEY (`id`),
-        KEY `idx_colour_report_type_user` (`user_id`,`active`,`report_name`)
+        KEY `idx_colour_report_type_user` (`user_id`,`base_type`,`active`,`report_name`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
     if (!$ready) {
         return false;
@@ -525,6 +617,11 @@ function cstone_report_type_master_ready($conn)
         @$conn->query("ALTER TABLE sm_colour_stone_report_types ADD report_format varchar(20) NOT NULL DEFAULT 'a4' AFTER report_name");
         @$conn->query("UPDATE sm_colour_stone_report_types SET report_format = 'postcard' WHERE LOWER(report_name) LIKE '%post card%' OR LOWER(report_name) LIKE '%postcard%'");
         @$conn->query("UPDATE sm_colour_stone_report_types SET report_format = 'atm' WHERE report_format = 'a4' AND LOWER(report_name) LIKE '%card size%'");
+    }
+    $baseTypeColumn = @$conn->query("SHOW COLUMNS FROM sm_colour_stone_report_types LIKE 'base_type'");
+    if (!$baseTypeColumn || $baseTypeColumn->num_rows === 0) {
+        @$conn->query("ALTER TABLE sm_colour_stone_report_types ADD base_type varchar(2) NOT NULL DEFAULT 'S' AFTER user_id");
+        @$conn->query("UPDATE sm_colour_stone_report_types SET base_type = 'S' WHERE base_type IS NULL OR base_type = ''");
     }
     $count = @$conn->query('SELECT COUNT(*) AS total FROM sm_colour_stone_report_types');
     $row = $count ? $count->fetch_assoc() : null;
@@ -537,7 +634,7 @@ function cstone_report_type_master_ready($conn)
             'STRUNG GEM STONE GROUP TESTING',
             'STRUNG GEM STONE SINGLE PIECE TESTED',
         ];
-        $stmt = $conn->prepare('INSERT INTO sm_colour_stone_report_types (user_id, report_name, report_format, active) VALUES (1, ?, ?, 1)');
+        $stmt = $conn->prepare("INSERT INTO sm_colour_stone_report_types (user_id, base_type, report_name, report_format, active) VALUES (1, 'S', ?, ?, 1)");
         if ($stmt) {
             foreach ($defaults as $name) {
                 $lower = strtolower($name);
@@ -548,18 +645,92 @@ function cstone_report_type_master_ready($conn)
             $stmt->close();
         }
     }
+    $jewelCount = @$conn->query("SELECT COUNT(*) AS total FROM sm_colour_stone_report_types WHERE base_type = 'J'");
+    $jewelRow = $jewelCount ? $jewelCount->fetch_assoc() : null;
+    if ((int) ($jewelRow['total'] ?? 0) === 0) {
+        $defaults = [
+            ['Diamond And Colour Stone Jewellery (Post Card)', 'postcard'],
+            ['Colour Stone Jewellery (Post Card)', 'postcard'],
+            ['Diamond Jewellery (ATM)', 'atm'],
+        ];
+        $stmt = $conn->prepare("INSERT INTO sm_colour_stone_report_types (user_id, base_type, report_name, report_format, active) VALUES (1, 'J', ?, ?, 1)");
+        if ($stmt) {
+            foreach ($defaults as $row) {
+                [$name, $format] = $row;
+                $stmt->bind_param('ss', $name, $format);
+                $stmt->execute();
+            }
+            $stmt->close();
+        }
+    }
+    $screeningCount = @$conn->query("SELECT COUNT(*) AS total FROM sm_colour_stone_report_types WHERE base_type = 'DS'");
+    $screeningRow = $screeningCount ? $screeningCount->fetch_assoc() : null;
+    if ((int) ($screeningRow['total'] ?? 0) === 0) {
+        $defaults = [
+            ['Diamond Screening (A4)', 'a4'],
+            ['Diamond Screening (ATM)', 'atm'],
+            ['Diamond Screening (Postcard)', 'postcard'],
+        ];
+        $stmt = $conn->prepare("INSERT INTO sm_colour_stone_report_types (user_id, base_type, report_name, report_format, active) VALUES (1, 'DS', ?, ?, 1)");
+        if ($stmt) {
+            foreach ($defaults as $row) {
+                [$name, $format] = $row;
+                $stmt->bind_param('ss', $name, $format);
+                $stmt->execute();
+            }
+            $stmt->close();
+        }
+    }
+    $diamondCount = @$conn->query("SELECT COUNT(*) AS total FROM sm_colour_stone_report_types WHERE base_type = 'D'");
+    $diamondRow = $diamondCount ? $diamondCount->fetch_assoc() : null;
+    if ((int) ($diamondRow['total'] ?? 0) === 0) {
+        $defaults = [
+            ['Natural Diamond Grading (A4)', 'a4'],
+            ['Synthetic Diamond Grading (A4)', 'a4'],
+            ['Natural Diamond Grading (ATM)', 'atm'],
+        ];
+        $stmt = $conn->prepare("INSERT INTO sm_colour_stone_report_types (user_id, base_type, report_name, report_format, active) VALUES (1, 'D', ?, ?, 1)");
+        if ($stmt) {
+            foreach ($defaults as $row) {
+                [$name, $format] = $row;
+                $stmt->bind_param('ss', $name, $format);
+                $stmt->execute();
+            }
+            $stmt->close();
+        }
+    }
+    $pearlCount = @$conn->query("SELECT COUNT(*) AS total FROM sm_colour_stone_report_types WHERE base_type = 'P'");
+    $pearlRow = $pearlCount ? $pearlCount->fetch_assoc() : null;
+    if ((int) ($pearlRow['total'] ?? 0) === 0) {
+        $defaults = [
+            ['Pearl Report (A4)', 'a4'],
+            ['Pearl Report (ATM)', 'atm'],
+            ['Pearl Report (Postcard)', 'postcard'],
+        ];
+        $stmt = $conn->prepare("INSERT INTO sm_colour_stone_report_types (user_id, base_type, report_name, report_format, active) VALUES (1, 'P', ?, ?, 1)");
+        if ($stmt) {
+            foreach ($defaults as $row) {
+                [$name, $format] = $row;
+                $stmt->bind_param('ss', $name, $format);
+                $stmt->execute();
+            }
+            $stmt->close();
+        }
+    }
     return true;
 }
 
-function cstone_report_type_rows($conn, $userId = 0, $activeOnly = true)
+function cstone_report_type_rows($conn, $userId = 0, $activeOnly = true, $baseType = '')
 {
     if (!$conn || !cstone_report_type_master_ready($conn)) {
         return [];
     }
     $userId = (int) $userId;
+    $baseType = strtoupper(trim((string) $baseType));
+    $baseTypeSql = in_array($baseType, ['S', 'P', 'J', 'DS', 'D'], true) ? " AND base_type = '" . $conn->real_escape_string($baseType) . "'" : '';
     $scope = $userId > 0 ? '(' . user_branch_scope_sql($conn, $userId, 'user_id') . ' OR `user_id` = 1)' : '1=1';
     $activeSql = $activeOnly ? ' AND active = 1' : '';
-    $result = @$conn->query("SELECT id, user_id, report_name, report_format, active FROM sm_colour_stone_report_types WHERE {$scope}{$activeSql} ORDER BY CASE WHEN user_id = {$userId} THEN 0 ELSE 1 END, report_name ASC, id ASC");
+    $result = @$conn->query("SELECT id, user_id, base_type, report_name, report_format, active FROM sm_colour_stone_report_types WHERE {$scope}{$baseTypeSql}{$activeSql} ORDER BY base_type ASC, CASE WHEN user_id = {$userId} THEN 0 ELSE 1 END, report_name ASC, id ASC");
     if (!$result) {
         return [];
     }
@@ -567,7 +738,7 @@ function cstone_report_type_rows($conn, $userId = 0, $activeOnly = true)
     $seen = [];
     while ($row = $result->fetch_assoc()) {
         $name = trim((string) ($row['report_name'] ?? ''));
-        $key = strtolower($name);
+        $key = strtoupper((string) ($row['base_type'] ?? 'S')) . ':' . strtolower($name);
         if ($key === '' || isset($seen[$key])) {
             continue;
         }
@@ -577,18 +748,31 @@ function cstone_report_type_rows($conn, $userId = 0, $activeOnly = true)
     return $rows;
 }
 
-function cstone_report_type_code($id)
+function cstone_report_type_code($id, $baseType = 'S')
 {
+    $baseType = strtoupper(trim((string) $baseType));
+    if ($baseType === 'J') {
+        return 'JT' . max(0, (int) $id);
+    }
+    if ($baseType === 'DS') {
+        return 'DS' . max(0, (int) $id);
+    }
+    if ($baseType === 'D') {
+        return 'DG' . max(0, (int) $id);
+    }
+    if ($baseType === 'P') {
+        return 'PR' . max(0, (int) $id);
+    }
     return 'CS' . max(0, (int) $id);
 }
 
 function atm_record_layout_type($record)
 {
     $baseType = atm_report_type($record['type'] ?? 'S');
-    if ($baseType === 'S') {
+    if (in_array($baseType, ['S', 'P', 'J', 'DS', 'D'], true)) {
         $reportTypeId = (int) ($record['report_typ'] ?? 0);
         if ($reportTypeId > 0) {
-            return cstone_report_type_code($reportTypeId);
+            return cstone_report_type_code($reportTypeId, $baseType);
         }
     }
     return $baseType;
@@ -598,14 +782,18 @@ function atm_report_type_labels($conn = null)
 {
     $labels = [
         'S' => 'Colour Stone',
+        'P' => 'Pearl',
         'D' => 'Diamond',
         'J' => 'Jewellery',
         'R' => 'Rudraksha',
+        'DS' => 'Diamond Screening',
     ];
     if ($conn) {
         $userId = function_exists('auth_current_user_id') ? auth_current_user_id() : 0;
         foreach (cstone_report_type_rows($conn, $userId, true) as $row) {
-            $labels[cstone_report_type_code($row['id'])] = 'Colour Stone - ' . (string) $row['report_name'];
+            $baseType = strtoupper((string) ($row['base_type'] ?? 'S'));
+            $prefix = $baseType === 'J' ? 'Diamond Jewellery' : ($baseType === 'DS' ? 'Diamond Screening' : ($baseType === 'D' ? 'Diamond Grading' : ($baseType === 'P' ? 'Pearl' : 'Colour Stone')));
+            $labels[cstone_report_type_code($row['id'], $baseType)] = $prefix . ' - ' . (string) $row['report_name'];
         }
     }
     return $labels;
@@ -731,6 +919,22 @@ function atm_layout_file($type, $kind = 'positions')
         $suffix = 'colour-stone-type-' . (int) $match[1];
         return atm_user_file($kind === 'settings' ? 'settings-' . $suffix . '.json' : 'positions-' . $suffix . '.json');
     }
+    if (preg_match('/^PR([0-9]+)$/', $type, $match)) {
+        $suffix = 'pearl-type-' . (int) $match[1];
+        return atm_user_file($kind === 'settings' ? 'settings-' . $suffix . '.json' : 'positions-' . $suffix . '.json');
+    }
+    if (preg_match('/^JT([0-9]+)$/', $type, $match)) {
+        $suffix = 'jewellery-type-' . (int) $match[1];
+        return atm_user_file($kind === 'settings' ? 'settings-' . $suffix . '.json' : 'positions-' . $suffix . '.json');
+    }
+    if (preg_match('/^DS([0-9]+)$/', $type, $match)) {
+        $suffix = 'diamond-screening-type-' . (int) $match[1];
+        return atm_user_file($kind === 'settings' ? 'settings-' . $suffix . '.json' : 'positions-' . $suffix . '.json');
+    }
+    if (preg_match('/^DG([0-9]+)$/', $type, $match)) {
+        $suffix = 'diamond-grading-type-' . (int) $match[1];
+        return atm_user_file($kind === 'settings' ? 'settings-' . $suffix . '.json' : 'positions-' . $suffix . '.json');
+    }
     if ($type === 'S') {
         return atm_user_file($kind === 'settings' ? 'settings.json' : 'positions.json');
     }
@@ -739,6 +943,9 @@ function atm_layout_file($type, $kind = 'positions')
     }
     if ($type === 'J') {
         return atm_user_file($kind === 'settings' ? 'settings-jewellery.json' : 'positions-jewellery.json');
+    }
+    if ($type === 'P') {
+        return atm_user_file($kind === 'settings' ? 'settings-pearl.json' : 'positions-pearl.json');
     }
     return atm_user_file($kind === 'settings' ? 'settings-rudraksha.json' : 'positions-rudraksha.json');
 }
@@ -755,7 +962,12 @@ function atm_rudraksha_field_keys()
 
 function atm_jewellery_field_keys()
 {
-    return ['description', 'weight', 'diamondWeight', 'face', 'shapeCut', 'colour', 'clarity', 'cutGrade', 'stoneName', 'remarks', 'issuedTo'];
+    return ['description', 'weight', 'goldPurity', 'diamondWeight', 'shapeCut', 'colour', 'clarity', 'finish', 'stoneName', 'remarks', 'issuedTo', 'stoneWeight1', 'stoneWeight2', 'stoneWeight3', 'stoneWeight4', 'stoneWeight5', 'stoneWeight6', 'stoneWeight7', 'cr1', 'cr2', 'cr3', 'cr4', 'cr5', 'cr6', 'cr7', 'cs1', 'cs2', 'cs3', 'cs4', 'cs5', 'cs6', 'cs7'];
+}
+
+function atm_diamond_screening_field_keys()
+{
+    return ['reportNo', 'date', 'shapeCut', 'weight', 'face', 'naturalDiamondWeight', 'syntheticDiamondWeight', 'referenceDiamondWeight', 'nonDiamondWeight', 'naturalDiamondPcs', 'syntheticDiamondPcs', 'referenceDiamondPcs', 'nonDiamondPcs'];
 }
 
 function atm_common_field_keys()
@@ -763,45 +975,58 @@ function atm_common_field_keys()
     return ['reportNo', 'date', 'stoneName', 'shapeCut', 'dimension', 'origin', 'remarks', 'issuedTo'];
 }
 
+function atm_database_field_keys($type = 'S')
+{
+    $definitions = atm_field_definitions($type);
+    $columns = null;
+    if (isset($GLOBALS['conn']) && $GLOBALS['conn'] instanceof mysqli) {
+        $result = @$GLOBALS['conn']->query('SHOW COLUMNS FROM `sm_form_data`');
+        if ($result) {
+            $columns = [];
+            while ($row = $result->fetch_assoc()) {
+                $columns[(string) $row['Field']] = true;
+            }
+            $result->free();
+        }
+    }
+
+    $keys = [];
+    foreach ($definitions as $key => $definition) {
+        $column = (string) ($definition['column'] ?? '');
+        if ($column === '') {
+            continue;
+        }
+        if ($columns === null || isset($columns[$column])) {
+            $keys[] = $key;
+        }
+    }
+    return $keys;
+}
+
 function atm_builder_field_keys($type = 'S')
 {
-    $type = atm_report_type($type);
-    $baseType = atm_base_report_type($type);
-    if ($baseType === 'D') {
-        return array_values(array_unique(array_merge(atm_common_field_keys(), atm_diamond_field_keys())));
-    }
-    if ($baseType === 'J') {
-        return ['reportNo', 'date', 'description', 'weight', 'diamondWeight', 'face', 'shapeCut', 'colour', 'clarity', 'cutGrade', 'stoneName', 'remarks', 'issuedTo'];
-    }
-    if ($baseType === 'R') {
-        return array_values(array_unique(array_merge(['reportNo', 'date', 'weight', 'shapeCut', 'dimension', 'colour', 'issuedTo'], atm_rudraksha_field_keys())));
-    }
-    return array_values(array_diff(array_keys(atm_field_definitions($type)), array_merge(atm_diamond_field_keys(), ['diamondWeight', 'face', 'clarity', 'cutGrade'], atm_rudraksha_field_keys(), ['stoneUnit'])));
+    return atm_database_field_keys(atm_report_type($type));
 }
 
 function atm_default_positions($type = 'S')
 {
     $type = atm_report_type($type);
+    $baseType = atm_base_report_type($type);
     $fields = [];
     $x = 7;
     $y = 46;
     $w = 178;
     $h = 10;
     $diamondKeys = atm_diamond_field_keys();
-    $jewelleryKeys = atm_jewellery_field_keys();
-    $rudrakshaKeys = atm_rudraksha_field_keys();
     $diamondY = 46;
+    $builderKeys = array_flip(atm_builder_field_keys($type));
     foreach (atm_field_definitions($type) as $key => $definition) {
+        if (!isset($builderKeys[$key])) {
+            continue;
+        }
         $fieldY = in_array($key, $diamondKeys, true) ? $diamondY : $y;
         $defaultDisplay = isset(atm_default_fields()[$key]) ? atm_default_fields()[$key] : 'none';
-        if ($type === 'D') {
-            $defaultDisplay = in_array($key, array_merge(atm_common_field_keys(), $diamondKeys), true) ? 'block' : 'none';
-            if ($key === 'stoneName') $defaultDisplay = 'none';
-        } elseif ($type === 'J') {
-            $defaultDisplay = in_array($key, atm_builder_field_keys('J'), true) ? 'block' : 'none';
-        } elseif ($type === 'R') {
-            $defaultDisplay = in_array($key, array_merge(['reportNo', 'date', 'weight', 'shapeCut', 'dimension', 'colour', 'issuedTo'], $rudrakshaKeys), true) ? 'block' : 'none';
-        } elseif (in_array($key, array_merge($diamondKeys, $jewelleryKeys, $rudrakshaKeys), true)) {
+        if ($baseType === 'S' && in_array($key, ['speciesGroup', 'speciesMode'], true)) {
             $defaultDisplay = 'none';
         }
         $isTickField = isset($definition['valueType']) && $definition['valueType'] === 'tick';
@@ -816,6 +1041,8 @@ function atm_default_positions($type = 'S')
             'fontWeight' => 'normal',
             'fontSize' => null,
             'fontColor' => '',
+            'labelFontColor' => '',
+            'valueFontColor' => '',
             'labelWidth' => null,
             'labelAlign' => 'left',
             'valueAlign' => 'left',
@@ -831,7 +1058,7 @@ function atm_default_positions($type = 'S')
         }
     }
 
-    if ($type === 'D') {
+    if ($baseType === 'D') {
         $layoutY = 40;
         $visibleKeys = array_values(array_unique(array_merge(atm_common_field_keys(), $diamondKeys)));
         foreach ($visibleKeys as $key) {
@@ -841,16 +1068,16 @@ function atm_default_positions($type = 'S')
             $layoutY += 9;
         }
     }
-    if ($type === 'J') {
+    if ($baseType === 'J') {
         $layoutY = 40;
-        foreach (atm_builder_field_keys('J') as $key) {
+        foreach (atm_builder_field_keys($type) as $key) {
             if (!isset($fields[$key])) continue;
             $fields[$key]['y'] = $layoutY;
             $fields[$key]['h'] = in_array($key, ['description', 'remarks'], true) ? 14 : 8;
             $layoutY += in_array($key, ['description', 'remarks'], true) ? 15 : 9;
         }
     }
-    if ($type === 'R') {
+    if ($baseType === 'R') {
         $layoutY = 40;
         foreach (array_merge(['reportNo', 'date', 'description', 'weight', 'shapeCut', 'dimension', 'colour', 'face', 'specificComments', 'testCarriedOut', 'rudrakshaRemarks', 'issuedTo']) as $key) {
             if (!isset($fields[$key])) continue;
@@ -886,6 +1113,10 @@ function atm_read_positions($type = 'S')
     $fieldSettings = atm_read_json(atm_layout_file($type, 'settings'), $defaultFieldSettings);
 
     foreach (atm_field_definitions($type) as $key => $definition) {
+        if (!isset($defaults['fields'][$key])) {
+            unset($positions['fields'][$key]);
+            continue;
+        }
         $savedField = isset($saved['fields'][$key]) && is_array($saved['fields'][$key]) ? $saved['fields'][$key] : [];
         $positions['fields'][$key] = array_replace($defaults['fields'][$key], array_intersect_key($savedField, [
             'label' => true,
@@ -897,6 +1128,8 @@ function atm_read_positions($type = 'S')
             'fontWeight' => true,
             'fontSize' => true,
             'fontColor' => true,
+            'labelFontColor' => true,
+            'valueFontColor' => true,
             'labelWidth' => true,
             'labelAlign' => true,
             'valueAlign' => true,
@@ -910,6 +1143,9 @@ function atm_read_positions($type = 'S')
             : $definition['label'];
         $positions['fields'][$key]['column'] = $definition['column'];
         $positions['fields'][$key]['valueType'] = $definition['valueType'] ?? '';
+        if (atm_base_report_type($type) === 'S' && in_array($key, ['speciesGroup', 'speciesMode'], true)) {
+            $positions['fields'][$key]['display'] = 'none';
+        }
         if ($type === 'J' && $key === 'reportNo' && in_array(trim((string) $positions['fields'][$key]['label']), ['Certificate No', 'Certificate Number'], true)) {
             $positions['fields'][$key]['label'] = 'Report No';
         }

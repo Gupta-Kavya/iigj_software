@@ -10,6 +10,7 @@ $settings = postcard_read_settings($builderType);
 $builderFieldKeys = atm_builder_field_keys($builderType);
 $message = '';
 $messageType = 'success';
+$builderBackupStatus = $_GET['builder_backup'] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['background_image'])) {
     if ($_FILES['background_image']['error'] === UPLOAD_ERR_OK) {
@@ -19,8 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['background_image']))
             $extension = $extensions[$info['mime']];
             if (preg_match('/^CS([0-9]+)$/', $builderType, $match)) {
                 $backgroundName = 'postcard-background-colour-stone-type-' . (int) $match[1] . '.';
+            } elseif (preg_match('/^PR([0-9]+)$/', $builderType, $match)) {
+                $backgroundName = 'postcard-background-pearl-type-' . (int) $match[1] . '.';
             } else {
-                $backgroundName = $builderType === 'D' ? 'postcard-background-diamond.' : ($builderType === 'J' ? 'postcard-background-jewellery.' : ($builderType === 'R' ? 'postcard-background-rudraksha.' : 'postcard-background.'));
+                $backgroundName = $builderType === 'D' ? 'postcard-background-diamond.' : ($builderType === 'J' ? 'postcard-background-jewellery.' : ($builderType === 'P' ? 'postcard-background-pearl.' : ($builderType === 'R' ? 'postcard-background-rudraksha.' : 'postcard-background.')));
             }
             $relativePath = atm_user_asset_relative($backgroundName . $extension);
             $targetPath = __DIR__ . '/' . $relativePath;
@@ -88,6 +91,15 @@ $fontOptions = a4_font_options();
         <li class="active"><a href="postcardSettings.php?type=<?php echo $builderType; ?>">Postcard Builder</a></li>
     </ul>
     <?php if ($message): ?><div class="alert alert-<?php echo $messageType; ?>"><?php echo htmlspecialchars($message); ?></div><?php endif; ?>
+    <?php if ($builderBackupStatus): ?>
+        <div class="alert alert-<?php echo $builderBackupStatus === 'imported' ? 'success' : 'danger'; ?>">
+            <?php
+            echo htmlspecialchars($builderBackupStatus === 'imported'
+                ? 'Builder backup imported successfully.'
+                : 'Unable to import builder backup. Please choose a valid Postcard builder backup file.');
+            ?>
+        </div>
+    <?php endif; ?>
     <div class="builder-shell">
         <div class="a4-preview-card">
             <div class="a4-card-head"><h3>Live Postcard Layout</h3><p>Drag and resize fields, stone image and QR code. Use portrait 10cm x 15cm or landscape 15cm x 10cm.</p></div>
@@ -124,6 +136,18 @@ $fontOptions = a4_font_options();
                 <form method="post" enctype="multipart/form-data">
                     <input type="file" name="background_image" accept="image/jpeg,image/png" class="form-control">
                     <button class="btn btn-primary btn-wide" style="margin-top:10px;">Upload Background</button>
+                </form>
+            </div>
+            <div class="tool-section">
+                <h4>Backup &amp; Restore</h4>
+                <p class="builder-help">Download this Postcard builder layout as a backup, or import a saved backup into the selected certificate design.</p>
+                <a class="btn btn-default btn-wide" href="builder-settings-backup.php?action=export&amp;kind=postcard&amp;type=<?php echo urlencode($builderType); ?>"><i class="fa fa-download"></i> Download Backup</a>
+                <form method="post" enctype="multipart/form-data" action="builder-settings-backup.php" style="margin-top:10px;">
+                    <input type="hidden" name="action" value="import">
+                    <input type="hidden" name="kind" value="postcard">
+                    <input type="hidden" name="type" value="<?php echo htmlspecialchars($builderType); ?>">
+                    <input type="file" name="backup_file" accept="application/json,.json" class="form-control" required>
+                    <button type="submit" class="btn btn-primary btn-wide" style="margin-top:10px;"><i class="fa fa-upload"></i> Import Backup</button>
                 </form>
             </div>
             <div class="tool-section">
@@ -173,7 +197,8 @@ $fontOptions = a4_font_options();
                     <div><label>Label Weight</label><select id="a4FieldLabelFontWeight" class="form-control"><option value="normal">Regular</option><option value="bold">Bold</option></select></div>
                     <div><label>Value Weight</label><select id="a4FieldFontWeight" class="form-control"><option value="normal">Regular</option><option value="bold">Bold</option></select></div>
                     <div><label>Font Size</label><input type="number" id="a4FieldFontSize" class="form-control" min="8" max="40" placeholder="Default"></div>
-                    <div><label>Font Color</label><input type="color" id="a4FieldFontColor" class="form-control" value="#000000"></div>
+                    <div><label>Label Color</label><input type="color" id="a4FieldLabelFontColor" class="form-control" value="#000000"></div>
+                    <div><label>Value Color</label><input type="color" id="a4FieldValueFontColor" class="form-control" value="#000000"></div>
                     <div><label>Label Width</label><input type="number" id="a4FieldLabelWidth" class="form-control" min="0" max="350" placeholder="Default"></div>
                     <div><label>Label Align</label><select id="a4FieldLabelAlign" class="form-control"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
                     <div><label>Value Align</label><select id="a4FieldValueAlign" class="form-control"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
@@ -243,6 +268,8 @@ function applyA4Orientation(){
 }
 function a4FieldFontSize(f){ return f.fontSize || $("#fontSize").val() || 15; }
 function a4FieldFontColor(f){ return f.fontColor || $("#fontColor").val() || "#000000"; }
+function a4FieldLabelFontColor(f){ return f.labelFontColor || f.fontColor || $("#fontColor").val() || "#000000"; }
+function a4FieldValueFontColor(f){ return f.valueFontColor || f.fontColor || $("#fontColor").val() || "#000000"; }
 function a4FieldLabelWidth(f){ return f.labelWidth || $("#labelWidth").val() || 140; }
 function a4FieldFontFamily(f){ return f.fontFamily || $("#fontFamily").val() || "Arial"; }
 function a4AlignValue(value){ return value === "center" || value === "right" ? value : "left"; }
@@ -269,8 +296,8 @@ function applyA4FieldStyle(key){
     var labelW = f.showLabel === "none" ? 0 : sx(a4FieldLabelWidth(f));
     var gap = f.showLabel === "none" ? 0 : sx(12);
     var valueW = isTick ? Math.max(4, el.innerWidth()) : Math.max(10, el.innerWidth() - labelW - gap);
-    el.find(".a4-label").text(f.label || "").css({width:labelW+"px",display:f.showLabel === "none" ? "none" : "inline-block",textAlign:a4AlignValue(f.labelAlign),fontWeight:f.labelFontWeight === "bold" ? "700" : "300",textShadow:f.labelFontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
-    el.find(".a4-value").text(f.valueType === "tick" ? "✓" : ((f.showLabel === "none" || f.showColon === "none" ? "" : ": ") + "Sample")).css({width:valueW+"px",textAlign:a4AlignValue(f.valueAlign),fontFamily:f.valueType === "tick" ? "'Segoe UI Symbol','Arial Unicode MS','DejaVu Sans',Arial,sans-serif" : "inherit",fontWeight:f.fontWeight === "bold" ? "700" : "300",textShadow:f.fontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
+    el.find(".a4-label").text(f.label || "").css({width:labelW+"px",display:f.showLabel === "none" ? "none" : "inline-block",textAlign:a4AlignValue(f.labelAlign),color:a4FieldLabelFontColor(f),fontWeight:f.labelFontWeight === "bold" ? "700" : "300",textShadow:f.labelFontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
+    el.find(".a4-value").text(f.valueType === "tick" ? "✓" : ((f.showLabel === "none" || f.showColon === "none" ? "" : ": ") + "Sample")).css({width:valueW+"px",textAlign:a4AlignValue(f.valueAlign),color:a4FieldValueFontColor(f),fontFamily:f.valueType === "tick" ? "'Segoe UI Symbol','Arial Unicode MS','DejaVu Sans',Arial,sans-serif" : "inherit",fontWeight:f.fontWeight === "bold" ? "700" : "300",textShadow:f.fontWeight === "bold" ? "0.35px 0 currentColor" : "none"});
     if (!isTick) {
         var boxW = Math.max(4, el.innerWidth());
         var desiredLabelW = f.showLabel === "none" ? 0 : sx(a4FieldLabelWidth(f));
@@ -291,7 +318,7 @@ function applyA4TickSizing(key){
     var size = manualFontSize > 0 ? Math.min(manualFontSize, tickFitSize) : tickFitSize;
     el.addClass("a4-tick-field").css({fontSize:size+"px",lineHeight:el.innerHeight()+"px"});
     el.find(".a4-label").hide();
-    el.find(".a4-value").text("\u2713").css({width:Math.max(4, el.innerWidth())+"px",height:el.innerHeight()+"px",lineHeight:el.innerHeight()+"px",textAlign:"center"});
+    el.find(".a4-value").text("\u2713").css({width:Math.max(4, el.innerWidth())+"px",height:el.innerHeight()+"px",lineHeight:el.innerHeight()+"px",textAlign:"center",color:a4FieldValueFontColor(f)});
 }
 function extraImageById(id){
     var found = null;
@@ -393,7 +420,8 @@ function selectA4Field(key, additive){
     $("#a4FieldFontWeight").val(f.fontWeight === "bold" ? "bold" : "normal");
     $("#a4FieldFontFamily").val(f.fontFamily || "");
     $("#a4FieldFontSize").val(f.fontSize || "");
-    $("#a4FieldFontColor").val(f.fontColor || $("#fontColor").val() || "#000000");
+    $("#a4FieldLabelFontColor").val(f.labelFontColor || f.fontColor || $("#fontColor").val() || "#000000");
+    $("#a4FieldValueFontColor").val(f.valueFontColor || f.fontColor || $("#fontColor").val() || "#000000");
     $("#a4FieldLabelWidth").val(f.labelWidth || "");
     $("#a4FieldLabelAlign").val(a4AlignValue(f.labelAlign));
     $("#a4FieldValueAlign").val(a4AlignValue(f.valueAlign));
@@ -447,7 +475,8 @@ function applySelectedA4FieldStyle(){
     f.fontWeight = $("#a4FieldFontWeight").val() === "bold" ? "bold" : "normal";
     f.fontFamily = $("#a4FieldFontFamily").val() || "";
     f.fontSize = $("#a4FieldFontSize").val() ? parseFloat($("#a4FieldFontSize").val()) : null;
-    f.fontColor = $("#a4FieldFontColor").val();
+    f.labelFontColor = $("#a4FieldLabelFontColor").val();
+    f.valueFontColor = $("#a4FieldValueFontColor").val();
     f.labelWidth = $("#a4FieldLabelWidth").val() ? parseFloat($("#a4FieldLabelWidth").val()) : null;
     f.labelAlign = a4AlignValue($("#a4FieldLabelAlign").val());
     f.valueAlign = a4AlignValue($("#a4FieldValueAlign").val());
@@ -476,7 +505,7 @@ function applyA4Settings(){
 }
 function collectA4Settings(){
     var data = {orientation:$("#a4Orientation").val(),backgroundImage:a4Settings.backgroundImage,fontFamily:$("#fontFamily").val(),fontSize:$("#fontSize").val(),fontColor:$("#fontColor").val(),labelWidth:$("#labelWidth").val(),fields:{},stoneImage:{},qrCode:{},additionalImages:[]};
-    $(".a4-field").each(function(){ var key=$(this).data("key"), p=$(this).position(), f=a4Settings.fields[key]; data.fields[key]={label:f.label,column:f.column,valueType:f.valueType || "",display:$(".field-display[data-key='"+key+"']").val(),showLabel:f.showLabel || "block",showColon:f.showColon === "none" ? "none" : "block",labelFontWeight:f.labelFontWeight === "bold" ? "bold" : "normal",fontWeight:f.fontWeight === "bold" ? "bold" : "normal",fontFamily:f.fontFamily || "",fontSize:f.fontSize || "",fontColor:f.fontColor || "",labelWidth:f.labelWidth || "",labelAlign:a4AlignValue(f.labelAlign),valueAlign:a4AlignValue(f.valueAlign),x:ux(p.left),y:uy(p.top),w:ux($(this).outerWidth()),h:uy($(this).outerHeight())}; });
+    $(".a4-field").each(function(){ var key=$(this).data("key"), p=$(this).position(), f=a4Settings.fields[key]; data.fields[key]={label:f.label,column:f.column,valueType:f.valueType || "",display:$(".field-display[data-key='"+key+"']").val(),showLabel:f.showLabel || "block",showColon:f.showColon === "none" ? "none" : "block",labelFontWeight:f.labelFontWeight === "bold" ? "bold" : "normal",fontWeight:f.fontWeight === "bold" ? "bold" : "normal",fontFamily:f.fontFamily || "",fontSize:f.fontSize || "",fontColor:f.fontColor || "",labelFontColor:f.labelFontColor || "",valueFontColor:f.valueFontColor || "",labelWidth:f.labelWidth || "",labelAlign:a4AlignValue(f.labelAlign),valueAlign:a4AlignValue(f.valueAlign),x:ux(p.left),y:uy(p.top),w:ux($(this).outerWidth()),h:uy($(this).outerHeight())}; });
     var sp=$("#a4Stone").position(); data.stoneImage={display:$("#stoneDisplay").val(),x:ux(sp.left),y:uy(sp.top),w:ux($("#a4Stone").outerWidth()),h:uy($("#a4Stone").outerHeight())};
     var qp=$("#a4Qr").position(); data.qrCode={display:$("#qrDisplay").val(),x:ux(qp.left),y:uy(qp.top),w:ux($("#a4Qr").outerWidth()),h:uy($("#a4Qr").outerHeight())};
     $(".a4-extra-image").each(function(index){
@@ -550,14 +579,14 @@ $(function(){
     $(".field-row label").on("click", function(){ var key=$(this).siblings(".field-display").data("key"); if(key) selectA4Field(key); });
     $("#fontFamily,#fontSize,#fontColor,#labelWidth").on("input change", function(){ $(".a4-draggable").css({fontFamily:$("#fontFamily").val()}); $.each(a4Settings.fields, function(key){ applyA4FieldStyle(key); }); });
     $("#a4Orientation").on("change", function(){ a4Settings.orientation=$(this).val(); applyA4Settings(); });
-    $("#a4FieldLabelText,#a4FieldShowLabel,#a4FieldShowColon,#a4FieldLabelFontWeight,#a4FieldFontWeight,#a4FieldFontFamily,#a4FieldFontSize,#a4FieldFontColor,#a4FieldLabelWidth,#a4FieldLabelAlign,#a4FieldValueAlign").on("input change", applySelectedA4FieldStyle);
+    $("#a4FieldLabelText,#a4FieldShowLabel,#a4FieldShowColon,#a4FieldLabelFontWeight,#a4FieldFontWeight,#a4FieldFontFamily,#a4FieldFontSize,#a4FieldLabelFontColor,#a4FieldValueFontColor,#a4FieldLabelWidth,#a4FieldLabelAlign,#a4FieldValueAlign").on("input change", applySelectedA4FieldStyle);
     $("#applyA4FieldPosition").on("click", applyA4FieldPosition);
     $("#a4FieldX,#a4FieldY,#a4FieldW,#a4FieldH").on("change", applyA4FieldPosition).on("keydown", function(event){ if(event.key === "Enter"){ event.preventDefault(); applyA4FieldPosition(); } });
     $("#nudgeA4Selected").on("click", function(){ moveA4Selected(parseFloat($("#a4NudgeX").val()) || 0, parseFloat($("#a4NudgeY").val()) || 0); });
     $("#selectAllA4Fields").on("click", function(){ var keys = visibleA4FieldKeys(); if(keys.length) { selectA4Field(keys[0]); setA4Selection(keys, keys[0]); } });
     $("#clearA4Selection").on("click", function(){ if(selectedA4FieldKey) setA4Selection([selectedA4FieldKey], selectedA4FieldKey); });
     $("#alignA4SelectedLeft").on("click", alignA4SelectedLeft);
-    $("#clearA4FieldStyle").on("click", function(){ if(!selectedA4FieldKey) return; var f=a4Settings.fields[selectedA4FieldKey]; f.showLabel="block"; f.showColon="block"; f.labelFontWeight="normal"; f.fontWeight="normal"; f.fontFamily=""; f.fontSize=null; f.fontColor=""; f.labelWidth=null; f.labelAlign="left"; f.valueAlign="left"; selectA4Field(selectedA4FieldKey); applyA4FieldStyle(selectedA4FieldKey); });
+    $("#clearA4FieldStyle").on("click", function(){ if(!selectedA4FieldKey) return; var f=a4Settings.fields[selectedA4FieldKey]; f.showLabel="block"; f.showColon="block"; f.labelFontWeight="normal"; f.fontWeight="normal"; f.fontFamily=""; f.fontSize=null; f.fontColor=""; f.labelFontColor=""; f.valueFontColor=""; f.labelWidth=null; f.labelAlign="left"; f.valueAlign="left"; selectA4Field(selectedA4FieldKey); applyA4FieldStyle(selectedA4FieldKey); });
     $(".field-display").on("change", function(){ $("#field_"+$(this).data("key")).toggle($(this).val() !== "none"); updateA4PositionInputs(); });
     $("#stoneDisplay").on("change", function(){ $("#a4Stone").toggle($(this).val() !== "none"); });
     $("#qrDisplay").on("change", function(){ $("#a4Qr").toggle($(this).val() !== "none"); });

@@ -1,15 +1,22 @@
 <?php
 require_once 'auth.php';
 auth_require_login();
+require_once 'db_connect.php';
 require_once 'atm_config.php';
 
 function cstone_pending_image_dir()
 {
-    $dir = atm_user_stone_dir() . '/_pending';
+    $dir = atm_user_image_dir(cstone_image_folder()) . '/_pending';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
     return $dir;
+}
+
+function cstone_image_folder()
+{
+    $type = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($_POST['image_type'] ?? 'stone'));
+    return $type === 'proportion' ? 'proportion_images' : ($type === 'clarity' ? 'clarity_images' : 'st_images');
 }
 
 function cstone_safe_upload_token($token)
@@ -39,7 +46,7 @@ function cstone_save_image_resource($image, $imageName, $uploadToken)
         imagejpeg($compressed_image, cstone_pending_image_dir() . '/' . $uploadToken . '.jpg', 82);
     } else {
         $filename = preg_replace('/[^0-9]/', '', (string) $imageName) . '.jpg';
-        imagejpeg($compressed_image, atm_user_stone_dir() . '/' . $filename, 82);
+        imagejpeg($compressed_image, atm_user_image_dir(cstone_image_folder()) . '/' . $filename, 82);
     }
 
     imagedestroy($compressed_image);
@@ -71,7 +78,7 @@ if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] === UPLOAD_ER
     header('Cache-Control: no-cache, no-store, must-revalidate');
     header('Pragma: no-cache');
     header('Expires: 0');
-    echo cstone_preview_html(atm_user_stone_relative($filename));
+    echo cstone_preview_html(atm_user_image_relative($filename, cstone_image_folder()));
     exit;
 }
 
@@ -96,5 +103,5 @@ if (isset($_POST['image'])) {
     header('Expires: 0');
 
 
-    echo cstone_preview_html(atm_user_stone_relative($filename));
+    echo cstone_preview_html(atm_user_image_relative($filename, cstone_image_folder()));
 }

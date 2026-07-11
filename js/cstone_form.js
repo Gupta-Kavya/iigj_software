@@ -19,6 +19,11 @@
     var bookingUnlocked = false;
     var bookingRequestId = 0;
     var requiresBookingUnlock = !$("#certi_display").prop("readonly");
+    var editExistingReportId = 0;
+    var submitDefaultHtml = submitButton ? submitButton.innerHTML : '<i class="fa fa-check"></i> Submit Form';
+    var feedType = (form.getAttribute("data-feed-type") || $("input[name='report_type']").val() || "S").toUpperCase();
+    var feedLabel = form.getAttribute("data-feed-label") || (feedType === "P" ? "Pearl" : "Colour stone");
+    var feedLabelLower = feedLabel.toLowerCase();
 
     function toast(type, message) {
         if (window.AppToast && AppToast[type]) {
@@ -59,13 +64,39 @@
         }
     }
 
-    function setTreatment(selectId, inputId, textareaId) {
+    function setSelectDescription(selectId, targetId, onlyWhenEmpty) {
         var select = document.getElementById(selectId);
         var option = select && select.options[select.selectedIndex];
         var desc = option ? option.getAttribute("data-description") || "" : "";
-        $("#" + inputId).val(desc);
-        if (desc && !$("#" + textareaId).val()) {
-            $("#" + textareaId).val(desc);
+        var target = $("#" + targetId);
+        if (!onlyWhenEmpty || !target.val()) {
+            target.val(desc);
+        }
+    }
+
+    function setTreatment(selectId, inputId) {
+        setSelectDescription(selectId, inputId, false);
+    }
+
+    function isOthersSpeciesMode() {
+        return $("input[name='species_mode']:checked").val() === "Others" || $.trim($("#stone_name").val()).toLowerCase() === "others";
+    }
+
+    function syncSpeciesMode() {
+        var othersMode = isOthersSpeciesMode();
+        if ($.trim($("#stone_name").val()).toLowerCase() === "others") {
+            $("input[name='species_mode'][value='Others']").prop("checked", true);
+            othersMode = true;
+        }
+        $("label[for='stone_name']").text(othersMode ? "Others" : "Variety");
+        var groupField = $("#species_grp");
+        var groupWrap = groupField.closest(".cstone-field");
+        if (othersMode) {
+            groupField.val("").prop("disabled", true);
+            groupWrap.hide();
+        } else {
+            groupField.prop("disabled", !!groupField.data("cstoneBookingLocked"));
+            groupWrap.show();
         }
     }
 
@@ -106,11 +137,15 @@
             }
         });
         $(".cstone-section, .cstone-aside, .cstone-action-bar").toggleClass("cstone-locked", locked);
+        if (!locked) {
+            syncSpeciesMode();
+        }
     }
 
     function clearBookingState() {
         bookingRequestId++;
         bookingUnlocked = false;
+        setEditMode(null);
         $("#assigned_certificate_no").text("");
         $("#assigned_certificate_result").hide();
         setBookingLock(true);
@@ -123,6 +158,7 @@
         $("#certi_no").val("");
         clearBookingState();
         setLocalDate();
+        syncSpeciesMode();
         resetImage();
         $("#agreement_no").focus();
     }
@@ -141,6 +177,7 @@
 
     function fillFromBooking(booking) {
         if (!booking) return;
+        setEditMode(null);
         $("#certi_no").val(booking.certi_no || "");
         $("#assigned_certificate_no").text((booking.ref_no || booking.report_no || "") + " / " + booking.certi_no);
         $("#assigned_certificate_result").css("display", "flex");
@@ -154,6 +191,62 @@
         $("#dimension").val("");
         syncStoneWeightUnits(booking.stone_wt_unit || "ct");
         $("#length_tested").val(booking.bead_length || "");
+    }
+
+    function setEditMode(report) {
+        editExistingReportId = report && report.id ? Number(report.id) || 0 : 0;
+        if (!submitButton) return;
+        submitButton.innerHTML = editExistingReportId ? '<i class="fa fa-check"></i> Update Form' : submitDefaultHtml;
+    }
+
+    function fillFromExistingReport(data) {
+        if (!data) return;
+        $("#agreement_no").val(data.ag_no || "");
+        $("#certi_no").val(data.certi_no || "");
+        $("#certi_display").val(data.certi_no || "");
+        $("#assigned_certificate_no").text((data.report_no || "") + " / " + (data.certi_no || ""));
+        $("#assigned_certificate_result").css("display", "flex");
+        $("#date").val(data.date || "");
+        $("#item_desc").val(data.desc1 || data.desc || "");
+        $("#gross_weight").val(data.gross_wt || "");
+        $("#gross_unit").val(data.unit_grs || "ct");
+        syncStoneWeightUnits(data.unit_stn || "ct");
+        $("#colour").val(data.color || "");
+        $("#shape_cut").val(data.shape_cut || "");
+        $("#stone_pcs").val(data.testd_pcs || data.pcs || data.tot_stone || "");
+        $("#tested_pcs_remark").val(data.tpremark || data.rem1 || "");
+        for (var i = 1; i <= 5; i++) {
+            $("#stone_weight_" + i).val(data["stone_wt" + i] || (i === 1 ? data.stone_wt || "" : ""));
+            $("#measurement_" + i).val(data["dime" + i] || (i === 1 ? data.dimension || "" : ""));
+        }
+        $("#length_tested").val(data.bead_lenth || "");
+        $("#ri").val(data.ri || data.ref_index || "");
+        $("#specefic_grav").val(data.sg || data.spe_gravit || "");
+        $("#magnification").val(data.magni || data.magnification || "");
+        $("#optic_char").val(data.optic || data.optic_char || "");
+        var mode = data.title_rem || "Species/Variety";
+        $("input[name='species_mode'][value='" + (mode === "Others" ? "Others" : "Species/Variety") + "']").prop("checked", true);
+        $("#stone_name").val(data.variety || "");
+        $("#species_grp").val(data.stone_name || data.spe_group || "");
+        syncSpeciesMode();
+        $("#comments").val(data.comment || "");
+        $("#origin").val(data.origin || "");
+        $("#treatment_comment_title").val(data.title_rem1 || "");
+        $("#treatment_comment_title_2").val(data.title_rem2 || "");
+        $("#treatment_comment_desc").val(data.trtcoment1 || "");
+        $("#treatment_comment_desc_2").val(data.trtcoment2 || "");
+        $("#ebay_prod_no").val(data.productno || "");
+        if (data.report_typ) {
+            $("#report_type_id").val(data.report_typ);
+            syncReportTypeText();
+        } else if (data.category) {
+            $("#report_type_text").val(data.category);
+        }
+        ["tri","tsg","tmag","tuvf","tabs","tirs","tedxrf","tlrs","tuvnir","tlaicpms","txray","tuvimg"].forEach(function (column) {
+            $("input[data-column='" + column + "']").prop("checked", Number(data[column] || 0) === 1);
+        });
+        syncTests();
+        setEditMode(data);
     }
 
     function syncStoneWeightUnits(value) {
@@ -174,7 +267,7 @@
             url: "cstone-booking-fetch.php",
             method: "POST",
             dataType: "json",
-            data: { agreement_no: keys.agreementNo, certi_no: keys.certiNo }
+            data: { agreement_no: keys.agreementNo, certi_no: keys.certiNo, report_type: feedType }
         }).done(function (response) {
             if (requestId !== bookingRequestId) return;
             if (!response || response.status !== "success") {
@@ -182,12 +275,25 @@
                 clearBookingState();
                 return;
             }
-            fillFromBooking(response.booking);
-            setBookingLock(false);
+            if (response.existing_other_type) {
+                clearBookingState();
+                toast("warning", "This certificate is already generated in another feeding type. Please open it from the correct feeding page.");
+                return;
+            }
             if (response.existing_report) {
-                toast("warning", "This certificate is already generated.");
+                fillFromExistingReport(response.existing_report);
+                setBookingLock(false);
+                fetchImage(true);
+                toast("warning", "This certificate is already generated. Loaded for editing.");
             } else if (!silent) {
+                fillFromBooking(response.booking);
+                setBookingLock(false);
+                fetchImage(true);
                 toast("success", "Booked report details loaded.");
+            } else {
+                fillFromBooking(response.booking);
+                setBookingLock(false);
+                fetchImage(true);
             }
         }).fail(function (xhr) {
             if (requestId !== bookingRequestId) return;
@@ -224,6 +330,8 @@
 
     function stoneNameMaster() {
         var stoneName = $.trim($("#stone_name").val());
+        syncSpeciesMode();
+        if (isOthersSpeciesMode()) return;
         if (!stoneName) return;
         $.ajax({
             url: "fetch_master_details.php",
@@ -232,6 +340,7 @@
             data: { master_stone_name: stoneName }
         }).done(function (data) {
             if (!data || data.status === "not_found") return;
+            if (isOthersSpeciesMode()) return;
             if (!$("#species_grp").val() && data.group) $("#species_grp").val(data.group);
             if (!$("#shape_cut").val() && data.shape_cut) $("#shape_cut").val(data.shape_cut);
             if (!$("#colour").val() && data.colour) $("#colour").val(data.colour);
@@ -252,6 +361,8 @@
 
         var data = new FormData(form);
         data.set("upload_token", uploadToken());
+        data.set("edit_existing_report", editExistingReportId ? "1" : "0");
+        data.set("edit_existing_report_id", editExistingReportId ? String(editExistingReportId) : "");
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving...';
 
@@ -264,15 +375,16 @@
             dataType: "json"
         }).done(function (response) {
             if (!response || response.status !== "success") {
-                toast("error", response && response.message ? response.message : "Unable to save colour stone report.");
+                toast("error", response && response.message ? response.message : "Unable to save " + feedLabelLower + " report.");
                 return;
             }
             $("#cstone_saved_certificate, #assigned_certificate_no").text(response.certi_no);
             $("#cstone_saved_report").text(response.report_no);
             $("#certi_display").val(response.certi_no);
             $("#cstone_save_result, #assigned_certificate_result").css("display", "flex");
-            toast("success", "Colour stone report saved. Certificate " + response.certi_no + " / Report " + response.report_no);
-            var askMessage = "Colour stone report saved for certificate " + response.certi_no + ". Generate this report now?";
+            var savedVerb = response.action === "updated" ? "updated" : "saved";
+            toast("success", feedLabel + " report " + savedVerb + ". Certificate " + response.certi_no + " / Report " + response.report_no);
+            var askMessage = feedLabel + " report " + savedVerb + " for certificate " + response.certi_no + ". Generate this report now?";
             if (window.AppConfirm && typeof AppConfirm.show === "function") {
                 AppConfirm.show(askMessage, {
                     title: "Generate report?",
@@ -291,12 +403,12 @@
                 resetAfterSave();
             }
         }).fail(function (xhr) {
-            var message = "Unable to save colour stone report.";
+            var message = "Unable to save " + feedLabelLower + " report.";
             try { message = JSON.parse(xhr.responseText).message || message; } catch (error) {}
             toast("error", message);
         }).always(function () {
             submitButton.disabled = false;
-            submitButton.innerHTML = '<i class="fa fa-check"></i> Submit Form';
+            submitButton.innerHTML = editExistingReportId ? '<i class="fa fa-check"></i> Update Form' : submitDefaultHtml;
         });
     });
 
@@ -322,15 +434,16 @@
         this.value = "";
     });
 
-    function fetchImage() {
+    function fetchImage(silent) {
+        var keys = bookingKeys();
         $.ajax({
             url: "image_fetch.php",
             method: "POST",
-            data: { input: "", upload_token: uploadToken() }
+            data: { input: keys.certiNo || "", upload_token: uploadToken() }
         }).done(function (html) {
             showPreview(html);
         }).fail(function () {
-            toast("error", "Unable to fetch image.");
+            if (!silent) toast("error", "Unable to fetch image.");
         });
     }
 
@@ -348,7 +461,7 @@
             url: "field-cpier.php",
             method: "POST",
             dataType: "json",
-            data: { field_no: certificate, report_type: "S" }
+            data: { field_no: certificate, report_type: feedType }
         }).done(function (data) {
             if (!data) {
                 toast("error", "Certificate not found.");
@@ -376,12 +489,11 @@
             $("#optic_char").val(data.optic || data.optic_char || "");
             $("#stone_name").val(data.variety || data.stone_name || "");
             $("#species_grp").val(data.stone_name || data.spe_group || "");
+            syncSpeciesMode();
             $("#comments").val(data.comment || "");
             $("#origin").val(data.origin || "");
             $("#treatment_comment_desc").val(data.trtcoment1 || "");
-            $("#treatment_long_comment").val(data.trtcoment1 || "");
             $("#treatment_comment_desc_2").val(data.trtcoment2 || "");
-            $("#treatment_long_comment_2").val(data.trtcoment2 || "");
             $("#ebay_prod_no").val(data.productno || "");
             ["tri","tsg","tmag","tuvf","tabs","tirs","tedxrf","tlrs","tuvnir","tlaicpms","txray","tuvimg"].forEach(function (column) {
                 $("input[data-column='" + column + "']").prop("checked", Number(data[column] || 0) === 1);
@@ -434,9 +546,11 @@
         }
     }
 
-    $("#treatment_comment_title").on("change", function () { setTreatment("treatment_comment_title", "treatment_comment_desc", "treatment_long_comment"); });
-    $("#treatment_comment_title_2").on("change", function () { setTreatment("treatment_comment_title_2", "treatment_comment_desc_2", "treatment_long_comment_2"); });
+    $("#treatment_comment_title").on("change", function () { setTreatment("treatment_comment_title", "treatment_comment_desc"); });
+    $("#treatment_comment_title_2").on("change", function () { setTreatment("treatment_comment_title_2", "treatment_comment_desc_2"); });
+    $("#general_comment_title").on("change", function () { setSelectDescription("general_comment_title", "comments", false); });
     $("#stone_name").on("change blur", stoneNameMaster);
+    $("input[name='species_mode']").on("change", syncSpeciesMode);
     $("#agreement_no, #certi_display").on("input", function () {
         if (requiresBookingUnlock) clearBookingState();
     }).on("change blur", function () {
@@ -449,6 +563,7 @@
     $(".cstone-weight-unit").on("change", function () {
         syncStoneWeightUnits(this.value);
     });
+    syncSpeciesMode();
     document.addEventListener("keydown", function (event) {
         if (event.keyCode === 119) {
             event.preventDefault();

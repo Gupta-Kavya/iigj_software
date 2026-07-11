@@ -44,7 +44,11 @@ foreach ($defaults['fields'] as $key => $fallback) {
     $item = isset($submitted['fields'][$key]) && is_array($submitted['fields'][$key]) ? $submitted['fields'][$key] : [];
     $label = trim((string) ($item['label'] ?? $fallback['label']));
     $fieldColor = isset($item['fontColor']) ? trim((string) $item['fontColor']) : '';
+    $labelFontColor = isset($item['labelFontColor']) ? trim((string) $item['labelFontColor']) : '';
+    $valueFontColor = isset($item['valueFontColor']) ? trim((string) $item['valueFontColor']) : '';
     $fieldFontFamily = isset($item['fontFamily']) ? trim((string) $item['fontFamily']) : '';
+    $labelFontFamily = isset($item['labelFontFamily']) ? trim((string) $item['labelFontFamily']) : '';
+    $valueFontFamily = isset($item['valueFontFamily']) ? trim((string) $item['valueFontFamily']) : '';
     $settings['fields'][$key] = [
         'label' => $label !== '' ? $label : $fallback['label'],
         'column' => $fallback['column'],
@@ -56,10 +60,15 @@ foreach ($defaults['fields'] as $key => $fallback) {
         'fontWeight' => isset($item['fontWeight']) && $item['fontWeight'] === 'bold' ? 'bold' : 'normal',
         'fontSize' => isset($item['fontSize']) && $item['fontSize'] !== '' ? atm_clamp($item['fontSize'], 8, 40) : null,
         'fontColor' => preg_match('/^#[0-9a-fA-F]{6}$/', $fieldColor) ? strtoupper($fieldColor) : '',
+        'labelFontColor' => preg_match('/^#[0-9a-fA-F]{6}$/', $labelFontColor) ? strtoupper($labelFontColor) : '',
+        'valueFontColor' => preg_match('/^#[0-9a-fA-F]{6}$/', $valueFontColor) ? strtoupper($valueFontColor) : '',
         'fontFamily' => $fieldFontFamily !== '' && a4_font_family_allowed($fieldFontFamily) ? $fieldFontFamily : '',
+        'labelFontFamily' => $labelFontFamily !== '' && a4_font_family_allowed($labelFontFamily) ? $labelFontFamily : '',
+        'valueFontFamily' => $valueFontFamily !== '' && a4_font_family_allowed($valueFontFamily) ? $valueFontFamily : '',
         'labelWidth' => isset($item['labelWidth']) && $item['labelWidth'] !== '' ? atm_clamp($item['labelWidth'], 0, 350) : null,
         'labelAlign' => $alignValue($item['labelAlign'] ?? ($fallback['labelAlign'] ?? 'left')),
         'valueAlign' => $alignValue($item['valueAlign'] ?? ($fallback['valueAlign'] ?? 'left')),
+        'condition' => substr(trim((string) ($item['condition'] ?? '')), 0, 300),
         'x' => atm_clamp(isset($item['x']) ? $item['x'] : $fallback['x'], 0, $maxX),
         'y' => atm_clamp(isset($item['y']) ? $item['y'] : $fallback['y'], 0, $maxY),
         'w' => atm_clamp(isset($item['w']) ? $item['w'] : $fallback['w'], 30, $maxX),
@@ -67,7 +76,7 @@ foreach ($defaults['fields'] as $key => $fallback) {
     ];
 }
 
-foreach (['stoneImage', 'qrCode'] as $key) {
+foreach (['stoneImage', 'proportionImage', 'clarityImage', 'qrCode'] as $key) {
     $fallback = $defaults[$key];
     $item = isset($submitted[$key]) && is_array($submitted[$key]) ? $submitted[$key] : [];
     $settings[$key] = [
@@ -79,7 +88,19 @@ foreach (['stoneImage', 'qrCode'] as $key) {
     ];
 }
 
+$symbolKey = isset($submitted['symbolKey']) && is_array($submitted['symbolKey']) ? $submitted['symbolKey'] : [];
+$symbolFallback = $defaults['symbolKey'];
+$settings['symbolKey'] = [
+    'display' => atm_display_value(isset($symbolKey['display']) ? $symbolKey['display'] : $symbolFallback['display']),
+    'x' => atm_clamp(isset($symbolKey['x']) ? $symbolKey['x'] : $symbolFallback['x'], 0, $maxX),
+    'y' => atm_clamp(isset($symbolKey['y']) ? $symbolKey['y'] : $symbolFallback['y'], 0, $maxY),
+    'w' => atm_clamp(isset($symbolKey['w']) ? $symbolKey['w'] : $symbolFallback['w'], 40, $maxX),
+    'h' => atm_clamp(isset($symbolKey['h']) ? $symbolKey['h'] : $symbolFallback['h'], 30, $maxY),
+    'fontSize' => atm_clamp(isset($symbolKey['fontSize']) ? $symbolKey['fontSize'] : $symbolFallback['fontSize'], 6, 24),
+];
+
 $settings['additionalImages'] = atm_normalize_additional_images($submitted['additionalImages'] ?? [], $maxX, $maxY, 120, 80);
+$settings['additionalTexts'] = a4_normalize_additional_texts($submitted['additionalTexts'] ?? [], $maxX, $maxY);
 
 $saved = file_put_contents(a4_settings_file($reportType), json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
 if ($saved === false) {

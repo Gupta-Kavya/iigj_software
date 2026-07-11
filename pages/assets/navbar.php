@@ -17,7 +17,7 @@ $navbarCanUseDiamond = true;
 $navbarCanUseJewellery = true;
 $navbarCanUseRudraksha = true;
 $currentPage = basename($_SERVER['PHP_SELF']);
-$masterPages = ['add-master.php', 'stone-master-menu.php', 'shape-cut-master-menu.php', 'ri-master-menu.php', 'magni-master-menu.php', 'colour-master-menu.php', 'colour-report-type-master.php'];
+$masterPages = ['add-master.php', 'stone-master-menu.php', 'shape-cut-master-menu.php', 'ri-master-menu.php', 'magni-master-menu.php', 'colour-master-menu.php', 'colour-report-type-master.php', 'collection-center-master.php'];
 if (auth_is_super_admin()) {
     $masterPages[] = 'rate-condition-master.php';
 }
@@ -67,13 +67,13 @@ if (auth_is_super_admin()) {
 
 <body>
     <script>
-    (function () {
-        try {
-            if (window.matchMedia("(min-width: 768px)").matches && window.localStorage.getItem("smartlinkSidebarCollapsed") === "1") {
-                document.body.className += (document.body.className ? " " : "") + "app-sidebar-collapsed";
-            }
-        } catch (error) {}
-    })();
+        (function () {
+            try {
+                if (window.matchMedia("(min-width: 768px)").matches && window.localStorage.getItem("smartlinkSidebarCollapsed") === "1") {
+                    document.body.className += (document.body.className ? " " : "") + "app-sidebar-collapsed";
+                }
+            } catch (error) { }
+        })();
     </script>
 
     <div id="wrapper">
@@ -93,7 +93,8 @@ if (auth_is_super_admin()) {
 
             <ul class="nav navbar-nav navbar-left navbar-top-links app-top-context">
                 <li>
-                    <button type="button" class="app-sidebar-toggle" id="appSidebarToggle" aria-label="Hide sidebar" aria-expanded="true" title="Hide sidebar">
+                    <button type="button" class="app-sidebar-toggle" id="appSidebarToggle" aria-label="Hide sidebar"
+                        aria-expanded="true" title="Hide sidebar">
                         <i class="fa fa-angle-left" aria-hidden="true"></i>
                     </button>
                 </li>
@@ -157,13 +158,14 @@ if (auth_is_super_admin()) {
                 </li>
                 <li class="dropdown app-user-menu">
                     <a class="dropdown-toggle" data-toggle="dropdown" href="#">
-                        <i class="fa fa-user fa-fw"></i> <?php echo htmlspecialchars(auth_current_user_name()); ?> <b class="caret"></b>
+                        <i class="fa fa-user fa-fw"></i> <?php echo htmlspecialchars(auth_current_user_name()); ?> <b
+                            class="caret"></b>
                     </a>
                     <ul class="dropdown-menu dropdown-user">
                         <li><a href="profile.php"><i class="fa fa-user fa-fw"></i> My Profile</a>
                         </li>
                         <?php if (auth_is_super_admin()): ?>
-                        <li><a href="super-admin.php"><i class="fa fa-shield fa-fw"></i> Super Admin</a></li>
+                            <li><a href="super-admin.php"><i class="fa fa-shield fa-fw"></i> Super Admin</a></li>
                         <?php endif; ?>
                         <!-- <li><a href="y"><i class="fa fa-gear fa-fw"></i> Settings</a>
                         </li> -->
@@ -177,70 +179,93 @@ if (auth_is_super_admin()) {
 
 
 
-            <div class="navbar-default sidebar app-sidebar" role="navigation" >
-                <div class="sidebar-nav navbar-collapse" >
+            <div class="navbar-default sidebar app-sidebar" role="navigation">
+                <div class="sidebar-nav navbar-collapse">
                     <ul class="nav" id="side-menu">
 
-                    <!-- <li>
+                        <!-- <li>
                             <div class="software_owner_logo app-sidebar-logo" style = "text-decoration:none;">
                                 <img src="assets/software_name.jpg" alt="" width="100%">
                             </div>
                         </li> -->
 
                         <li>
-                            <a href="index.php" class="<?php echo $currentPage === 'index.php' ? 'active' : ''; ?>"><i class="fa fa-dashboard fa-fw"></i> Dashboard</a>
+                            <a href="index.php" class="<?php echo $currentPage === 'index.php' ? 'active' : ''; ?>"><i
+                                    class="fa fa-dashboard fa-fw"></i> Dashboard</a>
                         </li>
 
                         <?php if ($navbarCanUseAnyCertificate): ?>
-                        <li>
-                            <a href="../pages/agreement.php" class="<?php echo in_array($currentPage, ['agreement.php', 'agreement-print.php'], true) ? 'active' : ''; ?>"><i class="fa fa-file-text-o fa-fw"></i> Stone Agreement</a>
-                        </li>
+                            <li>
+                                <a href="../pages/agreement.php"
+                                    class="<?php echo in_array($currentPage, ['agreement.php', 'agreement-print.php'], true) ? 'active' : ''; ?>"><i
+                                        class="fa fa-file-text-o fa-fw"></i> Stone Agreement</a>
+                            </li>
                         <?php endif; ?>
 
                         <?php if (auth_is_super_admin()): ?>
-                        <li>
-                            <a href="super-admin.php" class="<?php echo in_array($currentPage, ['super-admin.php', 'super-admin-user.php'], true) ? 'active' : ''; ?>"><i class="fa fa-shield fa-fw"></i> Super Admin</a>
-                        </li>
+                            <li>
+                                <a href="super-admin.php"
+                                    class="<?php echo in_array($currentPage, ['super-admin.php', 'super-admin-user.php'], true) ? 'active' : ''; ?>"><i
+                                        class="fa fa-shield fa-fw"></i> Super Admin</a>
+                            </li>
                         <?php endif; ?>
 
                         <?php if ($navbarCanUseStone): ?>
-                        <li>
-                            <a href="../pages/c_stone.php" class="<?php echo $currentPage === 'c_stone.php' ? 'active' : ''; ?>"><i class="fa fa-diamond fa-fw"></i> Colour Stone
-                                Feeding</a>
-                        </li>
+                            <li>
+                                <a href="../pages/c_stone.php"
+                                    class="<?php echo $currentPage === 'c_stone.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-diamond fa-fw"></i> Colour Stone</a>
+                            </li>
+                            <li>
+                                <a href="../pages/pearl.php"
+                                    class="<?php echo $currentPage === 'pearl.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-circle-o fa-fw"></i> Pearl</a>
+                            </li>
                         <?php endif; ?>
 
                         <?php if ($navbarCanUseDiamond): ?>
-                        <li>
-                            <a href="../pages/diamond.php" class="<?php echo $currentPage === 'diamond.php' ? 'active' : ''; ?>"><i class="fa fa-diamond fa-fw"></i> Diamond
-                                Feeding</a>
-                        </li>
+                            <li>
+                                <a href="../pages/diamond.php"
+                                    class="<?php echo $currentPage === 'diamond.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-diamond fa-fw"></i> Diamond
+                                    Grading</a>
+                            </li>
+                            <li>
+                                <a href="../pages/diamond-screening.php"
+                                    class="<?php echo $currentPage === 'diamond-screening.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-search fa-fw"></i> Diamond Screening</a>
+                            </li>
                         <?php endif; ?>
 
                         <?php if ($navbarCanUseJewellery): ?>
-                        <li>
-                            <a href="../pages/jewellery.php" class="<?php echo $currentPage === 'jewellery.php' ? 'active' : ''; ?>"><i class="fa fa-diamond fa-fw"></i> Jewellery
-                                Feeding</a>
-                        </li>
+                            <li>
+                                <a href="../pages/jewellery.php"
+                                    class="<?php echo $currentPage === 'jewellery.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-diamond fa-fw"></i> Diamond Jewellery</a>
+                            </li>
                         <?php endif; ?>
 
-                        <?php if ($navbarCanUseRudraksha): ?>
+                        <!-- <?php if ($navbarCanUseRudraksha): ?>
                         <li>
                             <a href="../pages/rudraksha.php" class="<?php echo $currentPage === 'rudraksha.php' ? 'active' : ''; ?>"><i class="fa fa-circle-o fa-fw"></i> Rudraksha
                                 Feeding</a>
                         </li>
-                        <?php endif; ?>
+                        <?php endif; ?> -->
 
                         <?php if ($navbarCanUseAnyCertificate): ?>
-                        <li>
-                            <a href="../pages/image_manager.php" class="<?php echo $currentPage === 'image_manager.php' ? 'active' : ''; ?>"><i class="fa fa-picture-o fa-fw"></i> Image
-                                Manager</a>
-                        </li>
+                            <li>
+                                <a href="../pages/image_manager.php"
+                                    class="<?php echo $currentPage === 'image_manager.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-picture-o fa-fw"></i> Image
+                                    Manager</a>
+                            </li>
 
-                        <li>
-                            <a href="../pages/report_generate.php" class="<?php echo $currentPage === 'report_generate.php' || $currentPage === 'atm_report_generate.php' ? 'active' : ''; ?>"><i class="fa fa-file-pdf-o fa-fw"></i>
-                                Generate Reports</a>
-                        </li>
+                            <li>
+                                <a href="../pages/report_generate.php"
+                                    class="<?php echo $currentPage === 'report_generate.php' || $currentPage === 'atm_report_generate.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-file-pdf-o fa-fw"></i>
+                                    Generate Reports</a>
+                            </li>
                         <?php endif; ?>
 
                         <!-- <li>
@@ -252,63 +277,87 @@ if (auth_is_super_admin()) {
                         </li> -->
 
                         <?php if ($navbarCanUseAnyCertificate): ?>
-                        <li>
-                            <a href="edit-report.php" class="<?php echo $currentPage === 'edit-report.php' ? 'active' : ''; ?>"><i class="fa fa-edit fa-fw"></i> Edit Reports</a>
-                        </li>
-
-                        <li>
-                            <a href="../pages/settings.php" class="<?php echo in_array($currentPage, ['settings.php', 'backPrintSettings.php', 'a4Settings.php', 'postcardSettings.php'], true) ? 'active' : ''; ?>"><i class="fa fa-cog fa-fw"></i> Settings</a>
-                        </li>
+                            <li>
+                                <a href="../pages/settings.php"
+                                    class="<?php echo in_array($currentPage, ['settings.php', 'backPrintSettings.php', 'a4Settings.php', 'postcardSettings.php'], true) ? 'active' : ''; ?>"><i
+                                        class="fa fa-cog fa-fw"></i> Settings</a>
+                            </li>
                         <?php endif; ?>
 
                         <li>
-                            <a href="../pages/apiSettings.php" class="<?php echo $currentPage === 'apiSettings.php' ? 'active' : ''; ?>"><i class="fa fa-key fa-fw"></i> API &amp; Verification</a>
+                            <a href="../pages/apiSettings.php"
+                                class="<?php echo $currentPage === 'apiSettings.php' ? 'active' : ''; ?>"><i
+                                    class="fa fa-key fa-fw"></i> API &amp; Verification</a>
                         </li>
-                        
-                         <li>
-    <a href="#mastermenu" data-toggle="collapse" aria-expanded="<?php echo in_array($currentPage, $masterPages, true) ? 'true' : 'false'; ?>" class="<?php echo in_array($currentPage, $masterPages, true) ? 'active' : ''; ?>">
-        <i class="fa fa-database fa-fw"></i> Master Menu <span class="fa arrow"></span>
-    </a>
-    <ul class="nav nav-second-level collapse <?php echo in_array($currentPage, $masterPages, true) ? 'in' : ''; ?>" id="mastermenu">
-        <li>
-            <a href="add-master.php" class="<?php echo $currentPage === 'add-master.php' ? 'active' : ''; ?>">Add Master Details</a>
-        </li>
-        <li>
-            <a href="colour-report-type-master.php" class="<?php echo $currentPage === 'colour-report-type-master.php' ? 'active' : ''; ?>">Colour Report Types</a>
-        </li>
-        <?php if (auth_is_super_admin()): ?>
-            <li>
-                <a href="rate-condition-master.php" class="<?php echo $currentPage === 'rate-condition-master.php' ? 'active' : ''; ?>">Rate Condition Master</a>
-            </li>
-        <?php endif; ?>
-        <li>
-            <a href="#editmastermenu" data-toggle="collapse" aria-expanded="false">Edit Master Menu <span class="fa arrow"></span></a>
-            <ul class="nav nav-third-level collapse" id="editmastermenu">
-                <li>
-                    <a href="stone-master-menu.php" class="<?php echo $currentPage === 'stone-master-menu.php' ? 'active' : ''; ?>">Stone Name</a>
-                </li>
-                <li>
-                    <a href="shape-cut-master-menu.php" class="<?php echo $currentPage === 'shape-cut-master-menu.php' ? 'active' : ''; ?>">Shape / Cut</a>
-                </li>
-                <li>
-                    <a href="ri-master-menu.php" class="<?php echo $currentPage === 'ri-master-menu.php' ? 'active' : ''; ?>">Refractive Index</a>
-                </li>
-                <li>
-                    <a href="magni-master-menu.php" class="<?php echo $currentPage === 'magni-master-menu.php' ? 'active' : ''; ?>">Magnification</a>
-                </li>
-                <li>
-                    <a href="colour-master-menu.php" class="<?php echo $currentPage === 'colour-master-menu.php' ? 'active' : ''; ?>">Colour</a>
-                </li>
-            </ul>
-        </li>
-    </ul>
-</li>
+
+                        <li>
+                            <a href="#mastermenu" data-toggle="collapse"
+                                aria-expanded="<?php echo in_array($currentPage, $masterPages, true) ? 'true' : 'false'; ?>"
+                                class="<?php echo in_array($currentPage, $masterPages, true) ? 'active' : ''; ?>">
+                                <i class="fa fa-database fa-fw"></i> Master Menu <span class="fa arrow"></span>
+                            </a>
+                            <ul class="nav nav-second-level collapse <?php echo in_array($currentPage, $masterPages, true) ? 'in' : ''; ?>"
+                                id="mastermenu">
+                                <li>
+                                    <a href="add-master.php"
+                                        class="<?php echo $currentPage === 'add-master.php' ? 'active' : ''; ?>">Add
+                                        Master Details</a>
+                                </li>
+                                <li>
+                                    <a href="colour-report-type-master.php"
+                                        class="<?php echo $currentPage === 'colour-report-type-master.php' ? 'active' : ''; ?>">Report
+                                        Types</a>
+                                </li>
+                                <li>
+                                    <a href="collection-center-master.php"
+                                        class="<?php echo $currentPage === 'collection-center-master.php' ? 'active' : ''; ?>">Collection
+                                        Centers</a>
+                                </li>
+                                <?php if (auth_is_super_admin()): ?>
+                                    <li>
+                                        <a href="rate-condition-master.php"
+                                            class="<?php echo $currentPage === 'rate-condition-master.php' ? 'active' : ''; ?>">Rate
+                                            Condition Master</a>
+                                    </li>
+                                <?php endif; ?>
+                                <li>
+                                    <a href="#editmastermenu" data-toggle="collapse" aria-expanded="false">Edit Master
+                                        Menu <span class="fa arrow"></span></a>
+                                    <ul class="nav nav-third-level collapse" id="editmastermenu">
+                                        <li>
+                                            <a href="stone-master-menu.php"
+                                                class="<?php echo $currentPage === 'stone-master-menu.php' ? 'active' : ''; ?>">Stone
+                                                Name</a>
+                                        </li>
+                                        <li>
+                                            <a href="shape-cut-master-menu.php"
+                                                class="<?php echo $currentPage === 'shape-cut-master-menu.php' ? 'active' : ''; ?>">Shape
+                                                / Cut</a>
+                                        </li>
+                                        <li>
+                                            <a href="ri-master-menu.php"
+                                                class="<?php echo $currentPage === 'ri-master-menu.php' ? 'active' : ''; ?>">Refractive
+                                                Index</a>
+                                        </li>
+                                        <li>
+                                            <a href="magni-master-menu.php"
+                                                class="<?php echo $currentPage === 'magni-master-menu.php' ? 'active' : ''; ?>">Magnification</a>
+                                        </li>
+                                        <li>
+                                            <a href="colour-master-menu.php"
+                                                class="<?php echo $currentPage === 'colour-master-menu.php' ? 'active' : ''; ?>">Colour</a>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </li>
 
 
                 </div>
-         
+
             </div>
         </nav>
-        <button type="button" class="app-sidebar-reveal" id="appSidebarReveal" aria-label="Show sidebar" title="Show sidebar">
+        <button type="button" class="app-sidebar-reveal" id="appSidebarReveal" aria-label="Show sidebar"
+            title="Show sidebar">
             <i class="fa fa-angle-right" aria-hidden="true"></i>
         </button>

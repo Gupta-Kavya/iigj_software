@@ -6,7 +6,7 @@
         <div class="image-hero">
             <div>
                 <h1><i class="fa fa-picture-o fa-fw"></i> Image Manager</h1>
-                <p>Upload, review and delete stone images for your logged-in account. These images are private for each user.</p>
+                <p>Upload, review and delete report images for your branch. Choose the folder you want to manage.</p>
             </div>
         </div>
 
@@ -15,8 +15,8 @@
                 <div class="image-card-head">
                     <div class="image-card-icon"><i class="fa fa-cloud-upload"></i></div>
                     <div>
-                        <h3>Upload Stone Images</h3>
-                        <p>Use JPG/JPEG images. Name image files as certificate number, for example <strong>12.jpg</strong>.</p>
+                        <h3>Upload Images</h3>
+                        <p>Use JPG/JPEG images. Certificate images should be named like <strong>12.jpg</strong>; symbol images can use the symbol name.</p>
                     </div>
                 </div>
                 <form id="image_upload_form" enctype="multipart/form-data">
@@ -38,6 +38,12 @@
                     </div>
                 </div>
                 <div class="tool-row">
+                    <select id="image_folder" class="form-control image-folder">
+                        <option value="st_images">Stone Images</option>
+                        <option value="symbol_images">Symbol Images</option>
+                        <option value="clarity_images">Clarity Images</option>
+                        <option value="proportion_images">Proportion Images</option>
+                    </select>
                     <input type="text" id="image_search" class="form-control image-search" placeholder="Search image name...">
                 </div>
                 <div class="tool-actions">

@@ -5,7 +5,7 @@ include("db_connect.php");
 require_once 'atm_config.php';
 // Perform a SELECT query on a table called "sm_form_data"
 $field_no = mysqli_real_escape_string($conn , $_POST["field_no"]);
-$report_type = isset($_POST['report_type']) && in_array($_POST['report_type'], ['S', 'D', 'J', 'R'], true) ? $_POST['report_type'] : '';
+$report_type = isset($_POST['report_type']) && in_array($_POST['report_type'], ['S', 'P', 'D', 'J', 'DS', 'R'], true) ? $_POST['report_type'] : '';
 $user_id = auth_current_user_id();
 $scopeSql = user_branch_scope_sql($conn, $user_id, 'user_id');
 $hasUserId = false;

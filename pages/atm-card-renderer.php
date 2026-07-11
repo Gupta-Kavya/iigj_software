@@ -216,8 +216,15 @@ function atm_render_front_card($record, $positions, $fieldSettings, $fieldMap, $
             $fontSize = max(7, (int) round($fieldFontSize * $scaleY));
             $fieldColor = isset($field['fontColor']) && preg_match('/^#[0-9a-fA-F]{6}$/', $field['fontColor'])
                 ? $field['fontColor']
-                : $fontColor;
-            $fieldTextColor = imagecolorallocate($canvas, hexdec(substr($fieldColor, 1, 2)), hexdec(substr($fieldColor, 3, 2)), hexdec(substr($fieldColor, 5, 2)));
+                : '';
+            $labelColor = isset($field['labelFontColor']) && preg_match('/^#[0-9a-fA-F]{6}$/', $field['labelFontColor'])
+                ? $field['labelFontColor']
+                : ($fieldColor !== '' ? $fieldColor : $fontColor);
+            $valueColor = isset($field['valueFontColor']) && preg_match('/^#[0-9a-fA-F]{6}$/', $field['valueFontColor'])
+                ? $field['valueFontColor']
+                : ($fieldColor !== '' ? $fieldColor : $fontColor);
+            $labelTextColor = imagecolorallocate($canvas, hexdec(substr($labelColor, 1, 2)), hexdec(substr($labelColor, 3, 2)), hexdec(substr($labelColor, 5, 2)));
+            $valueTextColor = imagecolorallocate($canvas, hexdec(substr($valueColor, 1, 2)), hexdec(substr($valueColor, 3, 2)), hexdec(substr($valueColor, 5, 2)));
             $left = (int) round((float) $field['x'] * $scaleX);
             $top = (int) round((float) $field['y'] * $scaleY);
             $areaWidth = (int) round((float) $field['w'] * $scaleX);
@@ -238,11 +245,11 @@ function atm_render_front_card($record, $positions, $fieldSettings, $fieldMap, $
                 if ($showLabel) {
                     $fallbackLabel = substr((string) ($field['label'] ?? $definition[0]), 0, 22);
                     $labelOffset = atm_align_offset($labelAlign, imagefontwidth($gdFontSize) * strlen($fallbackLabel), max(10, $fieldLabelWidth - 4));
-                    imagestring($canvas, $gdFontSize, $left + (int) round($labelOffset), max(0, $top + 1), $fallbackLabel, $fieldTextColor);
+                    imagestring($canvas, $gdFontSize, $left + (int) round($labelOffset), max(0, $top + 1), $fallbackLabel, $labelTextColor);
                 }
                 $fallbackValue = substr(($showColon ? ': ' : '') . $rawValue, 0, 35);
                 $valueOffset = atm_align_offset($valueAlign, imagefontwidth($gdFontSize) * strlen($fallbackValue), $valueWidth);
-                imagestring($canvas, $gdFontSize, $left + $fieldLabelWidth + $gap + (int) round($valueOffset), max(0, $top + 1), $fallbackValue, $fieldTextColor);
+                imagestring($canvas, $gdFontSize, $left + $fieldLabelWidth + $gap + (int) round($valueOffset), max(0, $top + 1), $fallbackValue, $valueTextColor);
                 continue;
             }
 
@@ -252,7 +259,7 @@ function atm_render_front_card($record, $positions, $fieldSettings, $fieldMap, $
                 $labelFont = $labelIsBold ? $boldFont : $fontFile;
                 $label = atm_fit_text($labelText, $fontSize, $labelFont, $fieldLabelWidth - 4);
                 $labelOffset = atm_align_offset($labelAlign, atm_text_width($fontSize, $labelFont, $label), max(10, $fieldLabelWidth - 4));
-                atm_draw_ttf_text($canvas, $fontSize, $left + (int) round($labelOffset), $baseline, $fieldTextColor, $labelFont, $label, $labelIsBold);
+                atm_draw_ttf_text($canvas, $fontSize, $left + (int) round($labelOffset), $baseline, $labelTextColor, $labelFont, $label, $labelIsBold);
             }
             $valuePrefix = $showColon ? ': ' : '';
             $valueIsBold = isset($field['fontWeight']) && $field['fontWeight'] === 'bold';
@@ -268,7 +275,7 @@ function atm_render_front_card($record, $positions, $fieldSettings, $fieldMap, $
                 $lineBaseline = $baseline + ($lineIndex * $lineHeight);
                 if ($lineBaseline > $top + $areaHeight) break;
                 $valueOffset = atm_align_offset($valueAlign, atm_text_width($fontSize, $valueFont, $lineText), $valueWidth);
-                atm_draw_ttf_text($canvas, $fontSize, $left + $fieldLabelWidth + $gap + (int) round($valueOffset), $lineBaseline, $fieldTextColor, $valueFont, $lineText, $valueType !== 'tick' && $valueIsBold);
+                atm_draw_ttf_text($canvas, $fontSize, $left + $fieldLabelWidth + $gap + (int) round($valueOffset), $lineBaseline, $valueTextColor, $valueFont, $lineText, $valueType !== 'tick' && $valueIsBold);
             }
         }
     }

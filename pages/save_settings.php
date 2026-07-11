@@ -2,6 +2,7 @@
 require_once 'auth.php';
 auth_require_login();
 header('Content-Type: application/json');
+require_once 'db_connect.php';
 require_once 'atm_config.php';
 auth_block_demo_action('Builder settings changes', 'certificate-builder.php', true);
 

@@ -14,11 +14,13 @@ agreement_table_ready($conn);
 customer_master_table_ready($conn);
 rate_master_table_ready($conn);
 user_branch_location_ready($conn);
+user_collection_center_ready($conn);
 $nextAgreementNo = agreement_next_no($conn, $userId);
 $nextCertificateInfo = atm_next_certificate_number($conn, $userId);
 $nextCertificateNo = (int) ($nextCertificateInfo['certi_no'] ?? 1);
 $locationName = user_branch_location_for_user($conn, $userId);
-$locationLetter = $locationName !== '' ? strtoupper(substr($locationName, 0, 1)) : 'S';
+$defaultCollectionCenter = user_collection_center_for_user($conn, $userId);
+$locationLetter = user_collection_center_code_normalize($defaultCollectionCenter['center_code'] ?? '') ?: ($locationName !== '' ? strtoupper(substr($locationName, 0, 1)) : 'S');
 $today = date('Y-m-d');
 $now = date('H:i');
 $delivery_date = date('Y-m-d', strtotime('+2 day'));
@@ -271,7 +273,32 @@ include "assets/navbar.php";
         width: 38px
     }
 
+    .agreement-items tr.agreement-row-cancelled {
+        background: #fff5f5
+    }
+
+    .agreement-items tr.agreement-row-cancelled td:not(:last-child) {
+        color: #7f1d1d;
+        text-decoration: line-through;
+        text-decoration-thickness: 1.5px
+    }
+
+    .agreement-items tr.agreement-row-cancelled input:not([type='hidden']),
+    .agreement-items tr.agreement-row-cancelled select {
+        background: #fff1f2;
+        color: #7f1d1d;
+        pointer-events: none;
+        text-decoration: line-through
+    }
+
     .agreement-items .remove-row {
+        border-radius: 6px;
+        height: 28px;
+        padding: 4px 8px
+    }
+
+    .agreement-items .cancel-row,
+    .agreement-items .undo-cancel-row {
         border-radius: 6px;
         height: 28px;
         padding: 4px 8px
@@ -336,6 +363,37 @@ include "assets/navbar.php";
         display: none;
         gap: 8px;
         padding: 10px 12px
+    }
+
+    .agreement-edit-bar {
+        align-items: end;
+        background: #fff;
+        border: 1px solid #ececf1;
+        border-radius: 8px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: minmax(150px, 190px) auto minmax(170px, 220px) auto 1fr;
+        margin-bottom: 10px;
+        padding: 10px 12px
+    }
+
+    .agreement-edit-bar label {
+        color: #404040;
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        margin: 0 0 3px
+    }
+
+    .agreement-edit-bar .btn {
+        border-radius: 8px;
+        min-height: 32px
+    }
+
+    .agreement-edit-note {
+        align-self: center;
+        color: #737373;
+        font-size: 12px
     }
 
     .amount-grid {
@@ -428,6 +486,10 @@ include "assets/navbar.php";
             justify-content: stretch
         }
 
+        .agreement-edit-bar {
+            grid-template-columns: 1fr
+        }
+
         .agreement-actions .btn {
             width: 100%
         }
@@ -446,10 +508,19 @@ include "assets/navbar.php";
                 <div class="agreement-status" id="agreement_status"><i class="fa fa-check-circle"></i><span>Saved
                         agreement <strong id="saved_agreement_no"></strong>.</span><a id="saved_agreement_print"
                         href="#" target="_blank">Open print view</a></div>
+                <div class="agreement-edit-bar">
+                    <div><label for="edit_agreement_lookup">Edit Agreement No.</label><input class="form-control" id="edit_agreement_lookup" inputmode="numeric" placeholder="Enter agreement no"></div>
+                    <button type="button" class="btn btn-default" id="load_agreement_edit"><i class="fa fa-pencil"></i> Load Edit</button>
+                    <div><label for="agreement_status_select">Agreement Status</label><select class="form-control" id="agreement_status_select" disabled><?php foreach (agreement_status_options() as $statusCode => $statusLabel): ?><option value="<?php echo agreement_h($statusCode); ?>"><?php echo agreement_h($statusLabel); ?></option><?php endforeach; ?></select></div>
+                    <button type="button" class="btn btn-default" id="update_agreement_status" disabled><i class="fa fa-whatsapp"></i> Update Status</button>
+                    <div class="agreement-edit-note" id="agreement_edit_note">Load an old agreement here to update it.</div>
+                </div>
                 <form id="agreement_form" autocomplete="off" data-agreement-no="<?php echo (int) $nextAgreementNo; ?>"
                     data-next-certi-no="<?php echo (int) $nextCertificateNo; ?>"
                     data-location-letter="<?php echo agreement_h($locationLetter); ?>"
                     data-location-name="<?php echo agreement_h($locationName); ?>">
+                    <input type="hidden" name="edit_agreement_id" id="edit_agreement_id">
+                    <input type="hidden" name="edit_agreement_no" id="edit_agreement_no">
                     <section class="agreement-card">
                         <div class="agreement-card-head">
                             <h3>Customer & Agreement</h3>
@@ -461,6 +532,8 @@ include "assets/navbar.php";
                                         value="<?php echo (int) $nextAgreementNo; ?>" readonly></div>
                                 <div class="agreement-field"><label for="docket_no">Docket No.</label><input
                                         class="form-control" name="docket_no" id="docket_no"></div>
+                                <div class="agreement-field"><label for="collection_center_id">Collection Center</label><select
+                                        class="form-control" name="collection_center_id" id="collection_center_id"><?php echo user_collection_center_options($conn, $userId, (int) ($defaultCollectionCenter['id'] ?? 0)); ?></select></div>
                                 <div class="agreement-field"><label for="agreement_date">Date</label><input
                                         class="form-control" type="date" name="agreement_date" id="agreement_date"
                                         value="<?php echo agreement_h($today); ?>"></div>
@@ -473,11 +546,11 @@ include "assets/navbar.php";
                                     <input type="hidden" name="customer_master_id" id="customer_master_id">
                                     <div class="customer-suggest" id="customer_suggest"></div>
                                 </div>
-                                <div class="agreement-field span2"><label for="depositor_name">Name of
+                                <div class="agreement-field span1"><label for="depositor_name">Name of
                                         Depositor</label><input class="form-control" name="depositor_name"
                                         id="depositor_name"></div>
-                                <div class="agreement-field"><label>Membership</label>
-                                    <div class="agreement-checks"><label><input type="radio" name="member_status"
+                                <div class="agreement-field span2 "><label>Membership</label>
+                                    <div class="agreement-checks form-control"><label><input type="radio" name="member_status"
                                                 value="Non Member" checked> Non Member</label><label><input type="radio"
                                                 name="member_status" value="Member"> Member</label></div>
                                 </div>

@@ -5,6 +5,7 @@ require_once 'db_connect.php';
 require_once 'agreement_helper.php';
 require_once 'customer_helper.php';
 require_once 'rate_helper.php';
+require_once 'waapi_helper.php';
 require_once 'user_branch_helper.php';
 require_once 'rate_condition_helper.php';
 require_once 'atm_config.php';
@@ -38,7 +39,92 @@ function agreement_save_item_number($value)
     return is_numeric($value) ? (float) $value : 0.0;
 }
 
+function agreement_save_release_number_lock($conn, $lockName)
+{
+    if (!$lockName) {
+        return;
+    }
+    $unlockStmt = $conn->prepare('SELECT RELEASE_LOCK(?)');
+    if ($unlockStmt) {
+        $unlockStmt->bind_param('s', $lockName);
+        $unlockStmt->execute();
+        $unlockStmt->close();
+    }
+}
+
+function agreement_save_location_letter($conn, $userId)
+{
+    $location = function_exists('user_branch_location_for_user') ? user_branch_location_for_user($conn, $userId) : '';
+    $letter = strtoupper(substr(preg_replace('/[^A-Z0-9]/', '', strtoupper((string) $location)), 0, 1));
+    return $letter !== '' ? $letter : 'S';
+}
+
+function agreement_save_assign_refs(array $items, $agreementNo, $startCertiNo, $locationLetter)
+{
+    $agreementNo = max(1, (int) $agreementNo);
+    $startCertiNo = max(1, (int) $startCertiNo);
+    $locationLetter = strtoupper(substr(preg_replace('/[^A-Z0-9]/', '', (string) $locationLetter), 0, 1));
+    if ($locationLetter === '') {
+        $locationLetter = 'S';
+    }
+    foreach ($items as $index => &$item) {
+        $certiNo = $startCertiNo + (int) $index;
+        $item['ref_no'] = $agreementNo . $locationLetter . $certiNo;
+    }
+    unset($item);
+    return $items;
+}
+
+function agreement_save_cancelled_row_message($agreement, array $cancelledRows)
+{
+    $customerName = trim((string) ($agreement['customer_name'] ?? 'Customer')) ?: 'Customer';
+    $agreementNo = (int) ($agreement['agreement_no'] ?? 0);
+    $testingCharges = agreement_money($agreement['testing_charges'] ?? 0);
+    $refundAmount = agreement_money($agreement['refund_amount'] ?? 0);
+    $itemWord = count($cancelledRows) === 1 ? 'item has' : 'items have';
+    $lines = [
+        'Dear ' . $customerName . ',',
+        '',
+        'Your stone testing agreement has been updated.',
+        'The following submitted ' . $itemWord . ' been cancelled.',
+        '',
+        'Agreement No: ' . $agreementNo,
+    ];
+
+    $lines[] = 'Cancelled Item Details:';
+    foreach ($cancelledRows as $row) {
+        $refNo = trim((string) ($row['ref_no'] ?? ''));
+        $category = trim((string) ($row['category'] ?? ''));
+        $pcs = max(0, (int) ($row['pcs'] ?? 0));
+        $amount = agreement_money($row['amount'] ?? 0);
+        $reason = trim((string) ($row['row_cancel_reason'] ?? ''));
+        $lines[] = '';
+        $lines[] = 'Ref No.   : ' . ($refNo !== '' ? $refNo : 'N/A');
+        if ($category !== '') {
+            $lines[] = 'Category  : ' . $category;
+        }
+        if ($pcs > 0) {
+            $lines[] = 'PCS       : ' . $pcs;
+        }
+        $lines[] = 'Amount    : Rs. ' . $amount;
+        if ($reason !== '') {
+            $lines[] = 'Reason    : ' . $reason;
+        }
+    }
+
+    $lines[] = '';
+    $lines[] = 'Updated Estimated Charges: Rs. ' . $testingCharges;
+    if ((float) $refundAmount > 0) {
+        $lines[] = 'Refund Amount           : Rs. ' . $refundAmount;
+    }
+    $lines[] = '';
+    $lines[] = 'For any query, please contact the lab.';
+    $lines[] = 'IIGJ RLC';
+    return implode("\n", $lines);
+}
+
 $userId = auth_current_user_id();
+user_collection_center_ready($conn);
 $memberStatus = in_array(($_POST['member_status'] ?? ''), ['Member', 'Non Member'], true) ? $_POST['member_status'] : 'Non Member';
 $mouCdc = agreement_mou_tier_code($_POST['mou_cdc'] ?? '');
 $mouDiscountPercent = agreement_mou_discount_percent($mouCdc);
@@ -104,6 +190,8 @@ foreach ($rawItems as $rawItem) {
         'discount_percent' => '0.00',
         'discount_amount' => '0.00',
         'amount' => substr(trim((string) ($rawItem['amount'] ?? '')), 0, 30),
+        'row_status' => strtolower(trim((string) ($rawItem['row_status'] ?? 'active'))) === 'cancelled' ? 'cancelled' : 'active',
+        'row_cancel_reason' => substr(trim((string) ($rawItem['row_cancel_reason'] ?? '')), 0, 300),
     ];
     $contentCheck = $item;
     unset($contentCheck['ref_no']);
@@ -121,6 +209,11 @@ foreach ($rawItems as $rawItem) {
         echo json_encode(['status' => 'error', 'message' => 'Selected category is not available in rate master.']);
         exit;
     }
+    if ($item['row_status'] === 'cancelled' && $item['row_cancel_reason'] === '') {
+        http_response_code(422);
+        echo json_encode(['status' => 'error', 'message' => 'Enter cancellation reason for every cancelled row.']);
+        exit;
+    }
     $rateValue = $memberStatus === 'Member' ? (float) ($rate['rate_member'] ?? 0) : (float) ($rate['rate_non_member'] ?? 0);
     $item['rate'] = agreement_money($rateValue);
     $calculated = rate_condition_calculate_amount($item, $rate, $locationName, $conditionRules);
@@ -134,7 +227,9 @@ foreach ($rawItems as $rawItem) {
     $item['discount_percent'] = agreement_money($mouDiscountPercent);
     $item['discount_amount'] = agreement_money($discountAmount);
     $item['amount'] = agreement_money(max(0, $grossAmount - $discountAmount));
-    $pcsTotal += max(0, (int) $item['pcs']);
+    if ($item['row_status'] !== 'cancelled') {
+        $pcsTotal += max(0, (int) $item['pcs']);
+    }
     $items[] = $item;
 }
 
@@ -144,7 +239,6 @@ if (!$items) {
     exit;
 }
 
-$agreementNo = agreement_next_no($conn, $userId);
 $docketNo = post_text('docket_no', 60);
 $depositorName = post_text('depositor_name', 160);
 $category = post_text('category', 80);
@@ -165,7 +259,12 @@ $paymentNeft = post_money('payment_neft');
 $paymentCard = post_money('payment_card');
 $paymentTds = post_money('payment_tds');
 $calculatedTestingCharges = 0.0;
+$cancelledRefundAmount = 0.0;
 foreach ($items as $item) {
+    if (($item['row_status'] ?? 'active') === 'cancelled') {
+        $cancelledRefundAmount += agreement_save_item_number($item['amount'] ?? 0);
+        continue;
+    }
     $calculatedTestingCharges += agreement_save_item_number($item['amount'] ?? 0);
 }
 if ($calculatedTestingCharges > 0) {
@@ -173,7 +272,7 @@ if ($calculatedTestingCharges > 0) {
 }
 $paidAmount = $paymentCash + $paymentCheque + $paymentNeft + $paymentCard + $paymentTds;
 $dueAmount = max(0, $testingCharges - $paidAmount);
-$refundAmount = max(0, $paidAmount - $testingCharges);
+$refundAmount = max(0, $paidAmount - $testingCharges, $cancelledRefundAmount);
 $chequeNo = post_text('cheque_no', 80);
 $preparedBy = post_text('prepared_by', 120);
 $remarks = post_text('remarks', 2000);
@@ -186,68 +285,238 @@ if ($signatureMode === 'esign') {
     }
 }
 $itemsJson = json_encode($items, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+$editAgreementId = max(0, (int) ($_POST['edit_agreement_id'] ?? 0));
+$editAgreementNo = max(0, (int) ($_POST['edit_agreement_no'] ?? 0));
+$existingAgreement = null;
+$previousRowsByRef = [];
+if ($editAgreementId > 0 && $editAgreementNo > 0) {
+    $scopeSql = user_branch_scope_sql($conn, $userId, 'user_id');
+    $editStmt = $conn->prepare("SELECT id, agreement_no, collection_center_id, collection_center_code, collection_center_name FROM sm_stone_agreements WHERE id = ? AND agreement_no = ? AND {$scopeSql} LIMIT 1");
+    if (!$editStmt) {
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to validate agreement for editing.']);
+        exit;
+    }
+    $editStmt->bind_param('ii', $editAgreementId, $editAgreementNo);
+    $editStmt->execute();
+    $existingAgreement = $editStmt->get_result()->fetch_assoc();
+    $editStmt->close();
+    if (!$existingAgreement) {
+        http_response_code(404);
+        echo json_encode(['status' => 'error', 'message' => 'Agreement not found for editing.']);
+        exit;
+    }
+    $oldRowsStmt = $conn->prepare('SELECT ref_no, row_status, row_cancel_reason FROM sm_stone_agreement_items WHERE agreement_id = ?');
+    if ($oldRowsStmt) {
+        $oldRowsStmt->bind_param('i', $editAgreementId);
+        $oldRowsStmt->execute();
+        $oldRowsResult = $oldRowsStmt->get_result();
+        while ($oldRow = $oldRowsResult->fetch_assoc()) {
+            $oldRef = trim((string) ($oldRow['ref_no'] ?? ''));
+            if ($oldRef !== '') {
+                $previousRowsByRef[$oldRef] = [
+                    'row_status' => strtolower(trim((string) ($oldRow['row_status'] ?? 'active'))),
+                    'row_cancel_reason' => trim((string) ($oldRow['row_cancel_reason'] ?? '')),
+                ];
+            }
+        }
+        $oldRowsStmt->close();
+    }
+}
+
+$postedCollectionCenterId = max(0, (int) ($_POST['collection_center_id'] ?? 0));
+if ($existingAgreement) {
+    $collectionCenter = [
+        'id' => (int) ($existingAgreement['collection_center_id'] ?? 0),
+        'center_code' => user_collection_center_code_normalize($existingAgreement['collection_center_code'] ?? ''),
+        'center_name' => trim((string) ($existingAgreement['collection_center_name'] ?? '')),
+    ];
+    if ($collectionCenter['center_code'] === '') {
+        $collectionCenter = user_collection_center_for_user($conn, $userId, $postedCollectionCenterId);
+    }
+} else {
+    $collectionCenter = user_collection_center_for_user($conn, $userId, $postedCollectionCenterId);
+}
+$collectionCenterId = (int) ($collectionCenter['id'] ?? 0);
+$collectionCenterCode = user_collection_center_code_normalize($collectionCenter['center_code'] ?? '');
+$collectionCenterName = substr(trim((string) ($collectionCenter['center_name'] ?? '')), 0, 120);
+if ($collectionCenterCode === '') {
+    $collectionCenterCode = agreement_save_location_letter($conn, $userId);
+}
+if ($collectionCenterName === '') {
+    $collectionCenterName = $collectionCenterCode;
+}
+
+$newlyCancelledRows = [];
+if ($existingAgreement) {
+    foreach ($items as $item) {
+        if (($item['row_status'] ?? 'active') !== 'cancelled') {
+            continue;
+        }
+        $refNo = trim((string) ($item['ref_no'] ?? ''));
+        if ($refNo === '') {
+            continue;
+        }
+        $previousStatus = strtolower(trim((string) ($previousRowsByRef[$refNo]['row_status'] ?? 'active')));
+        if ($previousStatus !== 'cancelled') {
+            $newlyCancelledRows[] = $item;
+        }
+    }
+}
+
+$numberLockName = '';
+if (!$existingAgreement) {
+    $lockBranch = function_exists('user_branch_storage_code') ? user_branch_storage_code($conn, $userId) : ('user_' . $userId);
+    $numberLockName = 'iigj_agreement_number_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $lockBranch);
+    $lockStmt = $conn->prepare('SELECT GET_LOCK(?, 10) AS lock_status');
+    if (!$lockStmt) {
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to prepare agreement number lock.']);
+        exit;
+    }
+    $lockStmt->bind_param('s', $numberLockName);
+    $lockStmt->execute();
+    $lockResult = $lockStmt->get_result()->fetch_assoc();
+    $lockStmt->close();
+    if (!$lockResult || (int) ($lockResult['lock_status'] ?? 0) !== 1) {
+        http_response_code(409);
+        echo json_encode(['status' => 'error', 'message' => 'Another agreement is being saved for this location. Please try again in a few seconds.']);
+        exit;
+    }
+}
 
 $conn->begin_transaction();
 
-$stmt = $conn->prepare("INSERT INTO sm_stone_agreements
-    (user_id, agreement_no, docket_no, customer_name, depositor_name, member_status, mou_cdc, category, gst_no, address, mobile_no, email, id_no, agreement_date, agreement_time, delivery_date, delivery_time, delivered, items_json, pcs_total, testing_charges, payment_cash, payment_cheque, payment_neft, payment_card, payment_tds, cheque_no, due_amount, refund_amount, prepared_by, remarks, signature_mode, customer_signature)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-if (!$stmt) {
-    $conn->rollback();
-    http_response_code(500);
-    echo json_encode(['status' => 'error', 'message' => 'Unable to save agreement: ' . $conn->error]);
-    exit;
+if ($existingAgreement) {
+    $id = (int) $existingAgreement['id'];
+    $agreementNo = (int) $existingAgreement['agreement_no'];
+    $stmt = $conn->prepare("UPDATE sm_stone_agreements SET
+        docket_no = ?, customer_name = ?, depositor_name = ?, member_status = ?, mou_cdc = ?, category = ?, gst_no = ?, address = ?, mobile_no = ?, email = ?, id_no = ?, agreement_date = ?, agreement_time = ?, delivery_date = ?, delivery_time = ?, delivered = ?, items_json = ?, pcs_total = ?, testing_charges = ?, payment_cash = ?, payment_cheque = ?, payment_neft = ?, payment_card = ?, payment_tds = ?, cheque_no = ?, due_amount = ?, refund_amount = ?, prepared_by = ?, remarks = ?, signature_mode = ?, customer_signature = ?, updated_at = NOW()
+        WHERE id = ?");
+    if (!$stmt) {
+        $conn->rollback();
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to update agreement: ' . $conn->error]);
+        exit;
+    }
+    $stmt->bind_param(
+        'sssssssssssssssisiddddddsddssssi',
+        $docketNo,
+        $customerName,
+        $depositorName,
+        $memberStatus,
+        $mouCdc,
+        $category,
+        $gstNo,
+        $address,
+        $mobileNo,
+        $email,
+        $idNo,
+        $agreementDate,
+        $agreementTime,
+        $deliveryDate,
+        $deliveryTime,
+        $delivered,
+        $itemsJson,
+        $pcsTotal,
+        $testingCharges,
+        $paymentCash,
+        $paymentCheque,
+        $paymentNeft,
+        $paymentCard,
+        $paymentTds,
+        $chequeNo,
+        $dueAmount,
+        $refundAmount,
+        $preparedBy,
+        $remarks,
+        $signatureMode,
+        $customerSignature,
+        $id
+    );
+} else {
+    $agreementNo = agreement_next_no($conn, $userId);
+    $nextCertificateInfoForAgreement = atm_next_certificate_number($conn, $userId);
+    $items = agreement_save_assign_refs(
+        $items,
+        $agreementNo,
+        (int) ($nextCertificateInfoForAgreement['certi_no'] ?? 1),
+        $collectionCenterCode
+    );
+    foreach ($items as &$item) {
+        $item['collection_center_id'] = $collectionCenterId;
+        $item['collection_center_code'] = $collectionCenterCode;
+        $item['collection_center_name'] = $collectionCenterName;
+    }
+    unset($item);
+    $itemsJson = json_encode($items, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $stmt = $conn->prepare("INSERT INTO sm_stone_agreements
+        (user_id, agreement_no, collection_center_id, collection_center_code, collection_center_name, docket_no, customer_name, depositor_name, member_status, mou_cdc, category, gst_no, address, mobile_no, email, id_no, agreement_date, agreement_time, delivery_date, delivery_time, delivered, items_json, pcs_total, testing_charges, payment_cash, payment_cheque, payment_neft, payment_card, payment_tds, cheque_no, due_amount, refund_amount, prepared_by, remarks, signature_mode, customer_signature)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    if (!$stmt) {
+        $conn->rollback();
+        agreement_save_release_number_lock($conn, $numberLockName);
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to save agreement: ' . $conn->error]);
+        exit;
+    }
+    $stmt->bind_param(
+        'iiisssssssssssssssssisiddddddsddssss',
+        $userId,
+        $agreementNo,
+        $collectionCenterId,
+        $collectionCenterCode,
+        $collectionCenterName,
+        $docketNo,
+        $customerName,
+        $depositorName,
+        $memberStatus,
+        $mouCdc,
+        $category,
+        $gstNo,
+        $address,
+        $mobileNo,
+        $email,
+        $idNo,
+        $agreementDate,
+        $agreementTime,
+        $deliveryDate,
+        $deliveryTime,
+        $delivered,
+        $itemsJson,
+        $pcsTotal,
+        $testingCharges,
+        $paymentCash,
+        $paymentCheque,
+        $paymentNeft,
+        $paymentCard,
+        $paymentTds,
+        $chequeNo,
+        $dueAmount,
+        $refundAmount,
+        $preparedBy,
+        $remarks,
+        $signatureMode,
+        $customerSignature
+    );
 }
-
-$stmt->bind_param(
-    'iisssssssssssssssisiddddddsddssss',
-    $userId,
-    $agreementNo,
-    $docketNo,
-    $customerName,
-    $depositorName,
-    $memberStatus,
-    $mouCdc,
-    $category,
-    $gstNo,
-    $address,
-    $mobileNo,
-    $email,
-    $idNo,
-    $agreementDate,
-    $agreementTime,
-    $deliveryDate,
-    $deliveryTime,
-    $delivered,
-    $itemsJson,
-    $pcsTotal,
-    $testingCharges,
-    $paymentCash,
-    $paymentCheque,
-    $paymentNeft,
-    $paymentCard,
-    $paymentTds,
-    $chequeNo,
-    $dueAmount,
-    $refundAmount,
-    $preparedBy,
-    $remarks,
-    $signatureMode,
-    $customerSignature
-);
 
 if (!$stmt->execute()) {
     $conn->rollback();
+    agreement_save_release_number_lock($conn, $numberLockName);
     http_response_code(500);
-    echo json_encode(['status' => 'error', 'message' => 'Unable to save agreement: ' . $stmt->error]);
+    echo json_encode(['status' => 'error', 'message' => ($existingAgreement ? 'Unable to update agreement: ' : 'Unable to save agreement: ') . $stmt->error]);
     exit;
 }
 
-$id = $stmt->insert_id;
+if (!$existingAgreement) {
+    $id = $stmt->insert_id;
+}
 $stmt->close();
 
-if (!agreement_save_items($conn, $id, $userId, $agreementNo, $items)) {
+if (!agreement_save_items($conn, $id, $userId, $agreementNo, $items, $collectionCenter)) {
     $conn->rollback();
+    agreement_save_release_number_lock($conn, $numberLockName);
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => 'Agreement saved failed while preparing stone rows for reports.']);
     exit;
@@ -265,16 +534,40 @@ customer_master_upsert($conn, $userId, [
     'gst_no' => $gstNo,
 ]);
 
-$conn->commit();
-
 $nextCertificateInfo = atm_next_certificate_number($conn, $userId);
+$conn->commit();
+agreement_save_release_number_lock($conn, $numberLockName);
 
-echo json_encode([
+$rowCancellationWhatsapp = null;
+$rowCancellationMessage = '';
+if ($newlyCancelledRows) {
+    $agreementForMessage = [
+        'customer_name' => $customerName,
+        'agreement_no' => $agreementNo,
+        'testing_charges' => $testingCharges,
+        'refund_amount' => $refundAmount,
+    ];
+    $chatIds = waapi_chat_ids_from_mobile_field($mobileNo);
+    $rowCancellationWhatsapp = waapi_send_text_message($conn, $chatIds, agreement_save_cancelled_row_message($agreementForMessage, $newlyCancelledRows));
+    $rowCancellationMessage = $rowCancellationWhatsapp['ok']
+        ? 'Cancellation WhatsApp sent to customer.'
+        : 'Agreement updated, but cancellation WhatsApp was not sent: ' . ($rowCancellationWhatsapp['message'] ?? 'Unknown error.');
+}
+
+$response = [
     'status' => 'success',
-    'message' => 'Agreement saved successfully.',
+    'message' => $existingAgreement ? 'Agreement updated successfully.' : 'Agreement saved successfully.',
     'id' => $id,
     'agreement_no' => $agreementNo,
+    'edit_mode' => $existingAgreement ? 1 : 0,
     'next_certificate_no' => (int) ($nextCertificateInfo['certi_no'] ?? 1),
     'print_url' => 'agreement-print.php?id=' . $id,
-]);
+    'labels_url' => 'agreement-labels-print.php?id=' . $id,
+];
+if ($rowCancellationWhatsapp !== null) {
+    $response['row_cancellation_whatsapp'] = $rowCancellationWhatsapp;
+    $response['row_cancellation_message'] = $rowCancellationMessage;
+}
+
+echo json_encode($response);
 ?>

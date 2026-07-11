@@ -209,9 +209,13 @@
 }
 
 .tool-row {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 180px minmax(0, 1fr);
     margin-bottom: 12px;
 }
 
+.image-folder,
 .image-search {
     border: 1px solid #d0d5dd;
     border-radius: 12px;
@@ -498,6 +502,10 @@
     .tool-actions {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .tool-row {
+        grid-template-columns: 1fr;
     }
 
     .btn-danger-soft,

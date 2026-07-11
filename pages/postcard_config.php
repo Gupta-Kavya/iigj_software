@@ -85,8 +85,12 @@ function postcard_settings_file($type = 'S')
     if (preg_match('/^CS([0-9]+)$/', $type, $match)) {
         return atm_user_file('postcard-report-settings-colour-stone-type-' . (int) $match[1] . '.json');
     }
+    if (preg_match('/^PR([0-9]+)$/', $type, $match)) {
+        return atm_user_file('postcard-report-settings-pearl-type-' . (int) $match[1] . '.json');
+    }
     if ($type === 'D') return atm_user_file('postcard-report-settings-diamond.json');
     if ($type === 'J') return atm_user_file('postcard-report-settings-jewellery.json');
+    if ($type === 'P') return atm_user_file('postcard-report-settings-pearl.json');
     if ($type === 'R') return atm_user_file('postcard-report-settings-rudraksha.json');
     return atm_user_file('postcard-report-settings.json');
 }
@@ -125,6 +129,8 @@ function postcard_read_settings($type = 'S')
             'fontWeight' => true,
             'fontSize' => true,
             'fontColor' => true,
+            'labelFontColor' => true,
+            'valueFontColor' => true,
             'fontFamily' => true,
             'labelWidth' => true,
             'labelAlign' => true,
@@ -136,6 +142,9 @@ function postcard_read_settings($type = 'S')
         ]));
         $normalizedFields[$key]['column'] = $fallback['column'];
         $normalizedFields[$key]['valueType'] = $fallback['valueType'] ?? '';
+        if (atm_base_report_type($type) === 'S' && in_array($key, ['speciesGroup', 'speciesMode'], true)) {
+            $normalizedFields[$key]['display'] = 'none';
+        }
     }
     $settings['fields'] = $normalizedFields;
     if ($isLegacyFieldLayout) {

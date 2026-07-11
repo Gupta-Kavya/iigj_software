@@ -15,6 +15,7 @@ $frontImagePath = $frontImage !== '' ? __DIR__ . '/' . $frontImage : '';
 $frontImageUrl = ($frontImage !== '' && is_file($frontImagePath)) ? htmlspecialchars($frontImage) . '?v=' . filemtime($frontImagePath) : '';
 $frontBackgroundStyle = $frontImageUrl !== '' ? "background-image:url('" . $frontImageUrl . "');" : '';
 include "assets/navbar.php";
+$builderBackupStatus = $_GET['builder_backup'] ?? '';
 ?>
 <link rel="stylesheet" href="../css/jquery-ui.min.css">
 <style>
@@ -69,6 +70,15 @@ include "assets/navbar.php";
                 <li role="presentation"><a href="a4Settings.php?type=<?php echo $builderType; ?>">A4 Builder</a></li>
                 <li role="presentation"><a href="postcardSettings.php?type=<?php echo $builderType; ?>">Postcard Builder</a></li>
             </ul>
+            <?php if ($builderBackupStatus): ?>
+                <div class="alert alert-<?php echo $builderBackupStatus === 'imported' ? 'success' : 'danger'; ?>">
+                    <?php
+                    echo htmlspecialchars($builderBackupStatus === 'imported'
+                        ? 'Builder backup imported successfully.'
+                        : 'Unable to import builder backup. Please choose a valid ATM builder backup file.');
+                    ?>
+                </div>
+            <?php endif; ?>
 
             <div class="builder-shell">
                 <div class="atm-preview-card">
@@ -152,7 +162,8 @@ include "assets/navbar.php";
                                         <div><label for="fieldFontWeight">Value Weight</label><select id="fieldFontWeight" class="form-control"><option value="normal">Regular</option><option value="bold">Bold</option></select></div>
                                         <div><label for="fieldFontSize">Font Size</label><input type="number" id="fieldFontSize" class="form-control" min="4" max="18" step="1" placeholder="Default"></div>
                                         <div><label for="fieldLabelWidth">Label Width</label><input type="number" id="fieldLabelWidth" class="form-control" min="0" max="180" step="1" placeholder="Default"></div>
-                                        <div><label for="fieldFontColor">Font Color</label><input type="color" id="fieldFontColor" class="form-control" value="#000000"></div>
+                                        <div><label for="fieldLabelFontColor">Label Color</label><input type="color" id="fieldLabelFontColor" class="form-control" value="#000000"></div>
+                                        <div><label for="fieldValueFontColor">Value Color</label><input type="color" id="fieldValueFontColor" class="form-control" value="#000000"></div>
                                         <div><label for="fieldLabelAlign">Label Align</label><select id="fieldLabelAlign" class="form-control"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
                                         <div><label for="fieldValueAlign">Value Align</label><select id="fieldValueAlign" class="form-control"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
                                     </div>
@@ -213,6 +224,18 @@ include "assets/navbar.php";
                                         <button type="button" id="deleteExtraImage" class="btn btn-default btn-mini">Delete Selected</button>
                                     </div>
                                     <div id="extraImagesList" class="field-list" style="margin-top:10px;max-height:130px;"></div>
+                    </div>
+                    <div class="tool-section">
+                                    <h4>Backup &amp; Restore</h4>
+                                    <p>Download this ATM builder layout as a backup, or import a saved backup into the selected certificate design.</p>
+                                    <a class="btn btn-default btn-wide" href="builder-settings-backup.php?action=export&amp;kind=atm&amp;type=<?php echo urlencode($builderType); ?>"><i class="fa fa-download"></i> Download Backup</a>
+                                    <form method="post" enctype="multipart/form-data" action="builder-settings-backup.php" style="margin-top:10px;">
+                                        <input type="hidden" name="action" value="import">
+                                        <input type="hidden" name="kind" value="atm">
+                                        <input type="hidden" name="type" value="<?php echo htmlspecialchars($builderType); ?>">
+                                        <input type="file" name="backup_file" accept="application/json,.json" class="form-control" required>
+                                        <button type="submit" class="btn btn-primary btn-wide" style="margin-top:10px;"><i class="fa fa-upload"></i> Import Backup</button>
+                                    </form>
                     </div>
                     <div class="status-note">Changes are previewed instantly. Save after changing the card layout, font, image or QR position.</div>
                     <div class="save-row">
@@ -370,6 +393,8 @@ $(function () {
             var fontSize = parseFloat(field.fontSize || $("#tableFontSize").val() || 6);
             var labelWidth = parseFloat(field.labelWidth || $("#tableLabelWidth").val() || 75);
             var color = field.fontColor || $("#tableFontColor").val();
+            var labelColor = field.labelFontColor || field.fontColor || $("#tableFontColor").val();
+            var valueColor = field.valueFontColor || field.fontColor || $("#tableFontColor").val();
             var labelViewWidth = field.showLabel === "none" ? 0 : toView(labelWidth);
             var valueViewWidth = Math.max(10, $(this).innerWidth() - labelViewWidth - toView(4) - 10);
             $(this).css({
@@ -385,6 +410,7 @@ $(function () {
                     width: labelViewWidth + "px",
                     display: field.showLabel === "none" ? "none" : "inline-block",
                     textAlign: alignValue(field.labelAlign),
+                    color: labelColor,
                     fontWeight: field.labelFontWeight === "bold" ? "700" : "300",
                     textShadow: field.labelFontWeight === "bold" ? "0.35px 0 currentColor" : "none"
                 });
@@ -392,6 +418,7 @@ $(function () {
             $(this).find(".atm-field-value").text(previewValue).css({
                 width: valueViewWidth + "px",
                 textAlign: alignValue(field.valueAlign),
+                color: valueColor,
                 fontFamily: field.valueType === "tick" ? "'Segoe UI Symbol','Arial Unicode MS','DejaVu Sans',Arial,sans-serif" : "inherit",
                 fontWeight: field.fontWeight === "bold" ? "700" : "300",
                 textShadow: field.fontWeight === "bold" ? "0.35px 0 currentColor" : "none"
@@ -495,7 +522,8 @@ $(function () {
         $("#fieldFontWeight").val(field.fontWeight === "bold" ? "bold" : "normal");
         $("#fieldFontSize").val(field.fontSize || "");
         $("#fieldLabelWidth").val(field.labelWidth || "");
-        $("#fieldFontColor").val(field.fontColor || $("#tableFontColor").val() || "#000000");
+        $("#fieldLabelFontColor").val(field.labelFontColor || field.fontColor || $("#tableFontColor").val() || "#000000");
+        $("#fieldValueFontColor").val(field.valueFontColor || field.fontColor || $("#tableFontColor").val() || "#000000");
         $("#fieldLabelAlign").val(alignValue(field.labelAlign));
         $("#fieldValueAlign").val(alignValue(field.valueAlign));
     }
@@ -512,7 +540,8 @@ $(function () {
         field.fontWeight = $("#fieldFontWeight").val() === "bold" ? "bold" : "normal";
         field.fontSize = $("#fieldFontSize").val() ? numericValue("#fieldFontSize", "") : null;
         field.labelWidth = $("#fieldLabelWidth").val() ? numericValue("#fieldLabelWidth", "") : null;
-        field.fontColor = $("#fieldFontColor").val();
+        field.labelFontColor = $("#fieldLabelFontColor").val();
+        field.valueFontColor = $("#fieldValueFontColor").val();
         field.labelAlign = alignValue($("#fieldLabelAlign").val());
         field.valueAlign = alignValue($("#fieldValueAlign").val());
         $("#atmField_" + selectedFieldKey).find(".atm-field-label").text(field.label);
@@ -684,6 +713,8 @@ $(function () {
                 fontWeight: (atmPositions.fields && atmPositions.fields[key] && atmPositions.fields[key].fontWeight === "bold") ? "bold" : "normal",
                 fontSize: (atmPositions.fields && atmPositions.fields[key]) ? (atmPositions.fields[key].fontSize || "") : "",
                 fontColor: (atmPositions.fields && atmPositions.fields[key]) ? (atmPositions.fields[key].fontColor || "") : "",
+                labelFontColor: (atmPositions.fields && atmPositions.fields[key]) ? (atmPositions.fields[key].labelFontColor || "") : "",
+                valueFontColor: (atmPositions.fields && atmPositions.fields[key]) ? (atmPositions.fields[key].valueFontColor || "") : "",
                 labelWidth: (atmPositions.fields && atmPositions.fields[key]) ? (atmPositions.fields[key].labelWidth || "") : "",
                 labelAlign: (atmPositions.fields && atmPositions.fields[key]) ? alignValue(atmPositions.fields[key].labelAlign) : "left",
                 valueAlign: (atmPositions.fields && atmPositions.fields[key]) ? alignValue(atmPositions.fields[key].valueAlign) : "left",
@@ -747,11 +778,13 @@ $(function () {
         if (selectedFieldKey) setFieldSelection([selectedFieldKey], selectedFieldKey);
     });
     $("#alignAtmSelectedLeft").on("click", alignSelectedFieldsLeft);
-    $("#fieldLabelText, #fieldShowLabel, #fieldShowColon, #fieldLabelFontWeight, #fieldFontWeight, #fieldFontSize, #fieldLabelWidth, #fieldFontColor, #fieldLabelAlign, #fieldValueAlign").on("input change", applySelectedFieldStyleInputs);
+    $("#fieldLabelText, #fieldShowLabel, #fieldShowColon, #fieldLabelFontWeight, #fieldFontWeight, #fieldFontSize, #fieldLabelWidth, #fieldLabelFontColor, #fieldValueFontColor, #fieldLabelAlign, #fieldValueAlign").on("input change", applySelectedFieldStyleInputs);
     $("#clearFieldStyle").on("click", function () {
         if (!selectedFieldKey || !atmPositions.fields || !atmPositions.fields[selectedFieldKey]) return;
         atmPositions.fields[selectedFieldKey].fontSize = null;
         atmPositions.fields[selectedFieldKey].fontColor = "";
+        atmPositions.fields[selectedFieldKey].labelFontColor = "";
+        atmPositions.fields[selectedFieldKey].valueFontColor = "";
         atmPositions.fields[selectedFieldKey].labelWidth = null;
         atmPositions.fields[selectedFieldKey].showLabel = "block";
         atmPositions.fields[selectedFieldKey].showColon = "block";

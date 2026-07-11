@@ -1,6 +1,7 @@
 <?php
 require_once 'db_connect.php';
 require_once 'atm_config.php';
+require_once 'agreement_helper.php';
 
 date_default_timezone_set('Asia/Kolkata');
 
@@ -10,8 +11,9 @@ $monthStart = date('Y-m-01');
 $monthEnd = date('Y-m-t');
 $dailyStart = date('Y-m-d', strtotime('-13 days'));
 $monthlyStart = date('Y-m-01', strtotime('-5 months'));
-$dateExpr = "COALESCE(NULLIF(DATE(`date`), '0000-00-00'), DATE(STR_TO_DATE(`date`, '%d-%m-%Y')), DATE(STR_TO_DATE(`date`, '%d/%m/%Y')), DATE(STR_TO_DATE(`date`, '%m/%d/%Y')))";
-$branchScopeSql = user_branch_scope_sql($conn, $userId, 'user_id');
+$dateExpr = "COALESCE(NULLIF(DATE(`date`), '0000-00-00'), DATE(STR_TO_DATE(`date`, '%Y-%m-%d')), DATE(STR_TO_DATE(`date`, '%d-%m-%Y')), DATE(STR_TO_DATE(`date`, '%d/%m/%Y')), DATE(STR_TO_DATE(`date`, '%d.%m.%Y')), DATE(STR_TO_DATE(`date`, '%m/%d/%Y')))";
+$branchScopeSql = user_branch_location_scope_sql($conn, $userId, 'location');
+agreement_table_ready($conn);
 
 function dash_count($conn, $sql, $types = '', $params = [])
 {
@@ -37,6 +39,24 @@ function dash_rows($conn, $sql, $types = '', $params = [])
     return $rows;
 }
 
+function dash_sum($conn, $sql, $types = '', $params = [])
+{
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) return 0.0;
+    if ($types !== '') dash_bind_params($stmt, $types, $params);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row ? (float) array_values($row)[0] : 0.0;
+}
+
+function dash_table_exists($conn, $table)
+{
+    $table = $conn->real_escape_string((string) $table);
+    $result = @$conn->query("SHOW TABLES LIKE '{$table}'");
+    return $result && $result->num_rows > 0;
+}
+
 function dash_bind_params($stmt, $types, $params)
 {
     $refs = [];
@@ -51,7 +71,9 @@ function dash_report_type_label($type)
 {
     $type = strtoupper(trim((string) $type));
     if ($type === 'S') return 'Colour Stone';
+    if ($type === 'P') return 'Pearl';
     if ($type === 'D') return 'Diamond';
+    if ($type === 'DS') return 'Diamond Screening';
     if ($type === 'J') return 'Jewellery';
     if ($type === 'R') return 'Rudraksha';
     return $type === '' ? 'Unknown' : $type;
@@ -62,20 +84,30 @@ function dash_num($number)
     return number_format((int) $number);
 }
 
+function dash_money($number)
+{
+    return 'Rs. ' . number_format((float) $number, 2);
+}
+
 function dash_pct($part, $total)
 {
     return $total > 0 ? round(($part / $total) * 100) : 0;
 }
 
-function dash_stone_image_count()
+function dash_image_count_folder($folder)
 {
-    $dir = atm_user_stone_dir();
+    $dir = atm_user_image_dir($folder);
     $count = 0;
     foreach (['jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG'] as $ext) {
         $files = glob($dir . '/*.' . $ext);
         $count += is_array($files) ? count($files) : 0;
     }
     return $count;
+}
+
+function dash_stone_image_count()
+{
+    return dash_image_count_folder('st_images');
 }
 
 $totalReports = dash_count($conn, "SELECT COUNT(*) FROM sm_form_data WHERE {$branchScopeSql}");
@@ -103,7 +135,47 @@ $imageCoverage = dash_pct(max(0, $totalReports - $missingImages), $totalReports)
 $typeRows = dash_rows($conn, "SELECT COALESCE(NULLIF(`type`, ''), 'Unknown') AS report_type, COUNT(*) AS total FROM sm_form_data WHERE {$branchScopeSql} GROUP BY COALESCE(NULLIF(`type`, ''), 'Unknown') ORDER BY total DESC");
 $stoneRows = dash_rows($conn, "SELECT COALESCE(NULLIF(stone_name, ''), 'Not specified') AS label, COUNT(*) AS total FROM sm_form_data WHERE {$branchScopeSql} GROUP BY COALESCE(NULLIF(stone_name, ''), 'Not specified') ORDER BY total DESC LIMIT 7");
 $colourRows = dash_rows($conn, "SELECT COALESCE(NULLIF(color, ''), 'Not specified') AS label, COUNT(*) AS total FROM sm_form_data WHERE {$branchScopeSql} GROUP BY COALESCE(NULLIF(color, ''), 'Not specified') ORDER BY total DESC LIMIT 7");
-$recentRows = dash_rows($conn, "SELECT certi_no, report_no, `date`, stone_name, stone_wt, color, `type` FROM sm_form_data WHERE {$branchScopeSql} ORDER BY certi_no DESC LIMIT 8");
+$recentRows = dash_rows($conn, "SELECT certi_no, report_no, `date`, stone_name, stone_wt1 AS stone_wt, color, `type` FROM sm_form_data WHERE {$branchScopeSql} ORDER BY certi_no DESC LIMIT 8");
+
+$agreementScopeSql = auth_is_super_admin() ? '1=1' : user_branch_scope_sql($conn, $userId, 'user_id');
+$agreementDateExpr = "DATE(agreement_date)";
+$totalAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql}");
+$todayAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND {$agreementDateExpr} = ?", 's', [$today]);
+$monthAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND {$agreementDateExpr} BETWEEN ? AND ?", 'ss', [$monthStart, $monthEnd]);
+$deliveredAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND agreement_status = 'DELIVERED'");
+$readyAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND agreement_status = 'READY_FOR_DELIVERY'");
+$inProcessAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND agreement_status = 'IN_PROCESS'");
+$cancelledAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND agreement_status = 'CANCELLED'");
+$totalTestingCharges = dash_sum($conn, "SELECT COALESCE(SUM(testing_charges), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}");
+$totalDueAmount = dash_sum($conn, "SELECT COALESCE(SUM(due_amount), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}");
+$totalPaidAmount = dash_sum($conn, "SELECT COALESCE(SUM(payment_cash + payment_cheque + payment_neft + payment_card + payment_tds), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}");
+$monthTestingCharges = dash_sum($conn, "SELECT COALESCE(SUM(testing_charges), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND {$agreementDateExpr} BETWEEN ? AND ?", 'ss', [$monthStart, $monthEnd]);
+$bookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters WHERE {$agreementScopeSql}");
+$pendingBookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters WHERE {$agreementScopeSql} AND status = 'booked'");
+$generatedBookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters WHERE {$agreementScopeSql} AND status = 'generated'");
+$statusRows = dash_rows($conn, "SELECT agreement_status AS label, COUNT(*) AS total FROM sm_stone_agreements WHERE {$agreementScopeSql} GROUP BY agreement_status ORDER BY total DESC");
+$bookingStatusRows = dash_rows($conn, "SELECT status AS label, COUNT(*) AS total FROM sm_form_masters WHERE {$agreementScopeSql} GROUP BY status ORDER BY total DESC");
+$customerRows = dash_rows($conn, "SELECT COALESCE(NULLIF(customer_name, ''), 'Not specified') AS label, COUNT(*) AS total, COALESCE(SUM(testing_charges), 0) AS amount FROM sm_stone_agreements WHERE {$agreementScopeSql} GROUP BY COALESCE(NULLIF(customer_name, ''), 'Not specified') ORDER BY total DESC, amount DESC LIMIT 7");
+$categoryRows = dash_rows($conn, "SELECT COALESCE(NULLIF(category, ''), 'Not specified') AS label, COUNT(*) AS total, COALESCE(SUM(amount), 0) AS amount FROM sm_stone_agreement_items WHERE {$agreementScopeSql} GROUP BY COALESCE(NULLIF(category, ''), 'Not specified') ORDER BY total DESC, amount DESC LIMIT 8");
+$paymentRows = [
+    ['label' => 'Cash', 'total' => dash_sum($conn, "SELECT COALESCE(SUM(payment_cash), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}")],
+    ['label' => 'Cheque', 'total' => dash_sum($conn, "SELECT COALESCE(SUM(payment_cheque), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}")],
+    ['label' => 'NEFT/UPI', 'total' => dash_sum($conn, "SELECT COALESCE(SUM(payment_neft), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}")],
+    ['label' => 'Card', 'total' => dash_sum($conn, "SELECT COALESCE(SUM(payment_card), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}")],
+    ['label' => 'TDS', 'total' => dash_sum($conn, "SELECT COALESCE(SUM(payment_tds), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}")],
+];
+$imageFolderRows = [
+    ['label' => 'Stone', 'total' => dash_image_count_folder('st_images')],
+    ['label' => 'Symbols', 'total' => dash_image_count_folder('symbol_images')],
+    ['label' => 'Clarity', 'total' => dash_image_count_folder('clarity_images')],
+    ['label' => 'Proportion', 'total' => dash_image_count_folder('proportion_images')],
+];
+$maxCustomer = $customerRows ? max(1, max(array_map('intval', array_column($customerRows, 'total')))) : 1;
+$maxCategory = $categoryRows ? max(1, max(array_map('intval', array_column($categoryRows, 'total')))) : 1;
+$maxPayment = max(1, (float) max(array_column($paymentRows, 'total')));
+$maxImageFolder = max(1, (int) max(array_column($imageFolderRows, 'total')));
+$deliveryCompletion = dash_pct($deliveredAgreements, max(1, $totalAgreements));
+$generationCompletion = dash_pct($generatedBookedStones, max(1, $bookedStones));
 
 $dailyRaw = dash_rows($conn, "SELECT $dateExpr AS report_day, COUNT(*) AS total FROM sm_form_data WHERE {$branchScopeSql} AND $dateExpr BETWEEN ? AND ? GROUP BY $dateExpr ORDER BY report_day ASC", 'ss', [$dailyStart, $today]);
 $dailyLookup = [];
@@ -137,49 +209,53 @@ include "assets/navbar.php";
 ?>
 
 <style>
-.dashboard-page { padding-bottom: 36px; }
+.dashboard-page { padding-bottom: 22px; }
 .dashboard-hero {
     border-bottom: 1px solid var(--app-border, #ececf1);
-    margin: 0 0 24px;
-    padding: 0 0 20px;
+    margin: 0 0 14px;
+    padding: 0 0 12px;
 }
-.dashboard-hero h1 { border: 0; color: var(--app-text, #171717); font-size: 26px; font-weight: 600; margin: 0 0 6px; padding: 0; }
-.dashboard-hero p { color: var(--app-muted, #737373); margin: 0; max-width: 780px; }
-.dash-grid { display: grid; gap: 16px; }
+.dashboard-hero h1 { border: 0; color: var(--app-text, #171717); font-size: 21px; font-weight: 600; margin: 0 0 3px; padding: 0; }
+.dashboard-hero p { color: var(--app-muted, #737373); font-size: 12px; margin: 0; max-width: 780px; }
+.dash-grid { display: grid; gap: 10px; }
 .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.chart-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); margin-top: 16px; }
-.insight-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; }
+.ops-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 10px; }
+.chart-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); margin-top: 10px; }
+.insight-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 10px; }
+.three-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; }
 .dash-card {
     background: #fff;
     border: 1px solid #ececf1;
     border-radius: 10px;
     overflow: hidden;
 }
-.metric-card { padding: 18px; position: relative; }
+.metric-card { padding: 11px 12px; position: relative; }
 .metric-card .icon {
     align-items: center;
     background: #f7f7f8;
     border-radius: 8px;
     color: #404040;
     display: flex;
-    font-size: 20px;
-    height: 44px;
+    font-size: 15px;
+    height: 32px;
     justify-content: center;
-    margin-bottom: 14px;
-    width: 44px;
+    margin-bottom: 8px;
+    width: 32px;
 }
-.metric-card h3 { color: #737373; font-size: 12px; font-weight: 500; margin: 0 0 6px; text-transform: none; }
-.metric-card .value { color: #171717; font-size: 28px; font-weight: 600; line-height: 1; }
-.metric-card .hint { color: #737373; font-size: 12px; margin-top: 8px; }
+.metric-card h3 { color: #737373; font-size: 11px; font-weight: 500; margin: 0 0 4px; text-transform: none; }
+.metric-card .value { color: #171717; font-size: 21px; font-weight: 600; line-height: 1; }
+.metric-card .hint { color: #737373; font-size: 10.5px; margin-top: 5px; }
 .blue .icon { background: #f7f7f8; color: #404040; }
 .green .icon { background: #f0fdf4; color: #16a34a; }
 .amber .icon { background: #fffbeb; color: #d97706; }
 .rose .icon { background: #fff1f2; color: #e11d48; }
-.card-head { border-bottom: 1px solid #ececf1; padding: 16px 18px; }
-.card-head h3 { color: #171717; font-size: 15px; font-weight: 600; margin: 0; }
-.card-head p { color: #737373; font-size: 12px; margin: 4px 0 0; }
-.card-body { padding: 18px; }
-.bar-chart { align-items: end; display: flex; gap: 8px; height: 230px; padding-top: 12px; }
+.violet .icon { background: #f5f3ff; color: #7c3aed; }
+.cyan .icon { background: #ecfeff; color: #0891b2; }
+.card-head { border-bottom: 1px solid #ececf1; padding: 10px 12px; }
+.card-head h3 { color: #171717; font-size: 13px; font-weight: 600; margin: 0; }
+.card-head p { color: #737373; font-size: 10.5px; margin: 2px 0 0; }
+.card-body { padding: 12px; }
+.bar-chart { align-items: end; display: flex; gap: 5px; height: 160px; padding-top: 6px; }
 .bar-item { align-items: center; display: flex; flex: 1; flex-direction: column; gap: 8px; height: 100%; justify-content: flex-end; min-width: 0; }
 .bar {
     background: #d4d4d4;
@@ -187,52 +263,70 @@ include "assets/navbar.php";
     min-height: 6px;
     width: 100%;
 }
-.bar-value { color: #404040; font-size: 11px; font-weight: 600; }
-.bar-label { color: #737373; font-size: 10px; text-align: center; transform: rotate(-35deg); white-space: nowrap; }
-.mini-bars .bar-chart { height: 165px; }
-.progress-row { margin-bottom: 14px; }
-.progress-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-.progress-top span:first-child { color: #404040; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.progress-top span:last-child { color: #737373; font-size: 12px; font-weight: 500; }
-.progress-track { background: #ececf1; border-radius: 999px; height: 8px; overflow: hidden; }
+.bar-value { color: #404040; font-size: 10px; font-weight: 600; }
+.bar-label { color: #737373; font-size: 9px; text-align: center; transform: rotate(-35deg); white-space: nowrap; }
+.mini-bars .bar-chart { height: 120px; }
+.progress-row { margin-bottom: 9px; }
+.progress-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.progress-top span:first-child { color: #404040; font-size: 11.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-top span:last-child { color: #737373; font-size: 10.5px; font-weight: 500; }
+.progress-track { background: #ececf1; border-radius: 999px; height: 6px; overflow: hidden; }
 .progress-fill { background: #737373; border-radius: 999px; height: 100%; }
-.type-list { display: grid; gap: 10px; }
-.type-pill { align-items: center; background: #f7f7f8; border: 1px solid #ececf1; border-radius: 8px; display: flex; justify-content: space-between; padding: 12px 14px; }
+.progress-fill.green { background: #16a34a; }
+.progress-fill.amber { background: #d97706; }
+.progress-fill.rose { background: #e11d48; }
+.progress-fill.cyan { background: #0891b2; }
+.type-list { display: grid; gap: 7px; }
+.type-pill { align-items: center; background: #f7f7f8; border: 1px solid #ececf1; border-radius: 8px; display: flex; font-size: 11.5px; justify-content: space-between; padding: 8px 10px; }
 .type-pill strong { color: #171717; font-weight: 500; }
 .type-pill span { color: #404040; font-weight: 600; }
+.status-grid { display: grid; gap: 7px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.status-card { background: #f8fafc; border: 1px solid #ececf1; border-radius: 8px; padding: 8px; }
+.status-card span { color: #737373; display: block; font-size: 10.5px; margin-bottom: 3px; }
+.status-card strong { color: #171717; display: block; font-size: 18px; line-height: 1; }
+.money-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.money-box { border: 1px solid #ececf1; border-radius: 8px; padding: 9px; }
+.money-box span { color: #737373; display: block; font-size: 10.5px; margin-bottom: 4px; }
+.money-box strong { color: #171717; display: block; font-size: 14px; line-height: 1.15; overflow-wrap: anywhere; }
+.money-box.due strong { color: #b91c1c; }
+.split-row { align-items: center; display: grid; gap: 9px; grid-template-columns: 116px minmax(0, 1fr) 64px; margin-bottom: 8px; }
+.split-row .split-label { color: #404040; font-size: 11.5px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-row .split-value { color: #737373; font-size: 10.5px; font-weight: 600; text-align: right; }
+.mini-ring-row { align-items: center; display: grid; gap: 10px; grid-template-columns: 112px minmax(0,1fr); }
 .quality-ring {
     align-items: center;
     background: conic-gradient(#16a34a <?php echo $imageCoverage; ?>%, #ececf1 0);
     border-radius: 50%;
     display: flex;
-    height: 150px;
+    height: 112px;
     justify-content: center;
-    margin: 8px auto 16px;
-    width: 150px;
+    margin: 4px auto 10px;
+    width: 112px;
 }
-.quality-ring-inner { align-items: center; background: #fff; border-radius: 50%; display: flex; flex-direction: column; height: 108px; justify-content: center; width: 108px; }
-.quality-ring-inner strong { color: #171717; font-size: 28px; font-weight: 600; }
-.quality-ring-inner span { color: #737373; font-size: 12px; }
+.quality-ring-inner { align-items: center; background: #fff; border-radius: 50%; display: flex; flex-direction: column; height: 78px; justify-content: center; width: 78px; }
+.quality-ring-inner strong { color: #171717; font-size: 20px; font-weight: 600; }
+.quality-ring-inner span { color: #737373; font-size: 10px; }
 .recent-table { margin: 0; }
-.recent-table th { color: #737373; font-size: 12px; font-weight: 500; text-transform: none; }
-.recent-table td { color: #404040; vertical-align: middle !important; }
-.empty-state { color: #737373; padding: 22px; text-align: center; }
-.quota-summary { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
-.quota-box { background: #f7f7f8; border: 1px solid #ececf1; border-radius: 10px; padding: 12px; }
-.quota-box span { color: #737373; display: block; font-size: 11px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
-.quota-box strong { color: #171717; display: block; font-size: 20px; line-height: 1; }
-.quota-meter { margin: 6px 0 14px; }
-.quota-meter .progress-track { height: 12px; }
+.recent-table th { color: #737373; font-size: 10.5px; font-weight: 500; text-transform: none; }
+.recent-table td { color: #404040; font-size: 11.5px; vertical-align: middle !important; }
+.empty-state { color: #737373; font-size: 11.5px; padding: 14px; text-align: center; }
+.quota-summary { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 10px; }
+.quota-box { background: #f7f7f8; border: 1px solid #ececf1; border-radius: 8px; padding: 8px; }
+.quota-box span { color: #737373; display: block; font-size: 9.5px; font-weight: 700; margin-bottom: 3px; text-transform: uppercase; }
+.quota-box strong { color: #171717; display: block; font-size: 16px; line-height: 1; }
+.quota-meter { margin: 4px 0 9px; }
+.quota-meter .progress-track { height: 8px; }
 .quota-meter .progress-fill { background: #171717; }
-.quota-note { color: #737373; font-size: 12px; line-height: 1.5; margin: 0; }
+.quota-note { color: #737373; font-size: 10.5px; line-height: 1.35; margin: 0; }
 .quota-warning { color: #b45309; font-weight: 700; }
 @media (max-width: 1200px) {
-    .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .chart-grid, .insight-grid { grid-template-columns: 1fr; }
+    .metric-grid, .ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .chart-grid, .insight-grid, .three-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-    .metric-grid { grid-template-columns: 1fr; }
-    .quota-summary { grid-template-columns: 1fr; }
+    .metric-grid, .ops-grid, .money-grid, .status-grid, .quota-summary { grid-template-columns: 1fr; }
+    .split-row, .mini-ring-row { grid-template-columns: 1fr; }
+    .split-row .split-value { text-align: left; }
     .bar-label { transform: none; white-space: normal; }
 }
 </style>
@@ -268,6 +362,33 @@ include "assets/navbar.php";
                 <h3>Next Cert. No.</h3>
                 <div class="value"><?php echo dash_num($nextCertificate); ?></div>
                 <div class="hint"><?php echo dash_num($missingImages); ?> reports missing images</div>
+            </div>
+        </div>
+
+        <div class="dash-grid ops-grid">
+            <div class="dash-card metric-card violet">
+                <div class="icon"><i class="fa fa-file-o"></i></div>
+                <h3>Total Agreements</h3>
+                <div class="value"><?php echo dash_num($totalAgreements); ?></div>
+                <div class="hint"><?php echo dash_num($monthAgreements); ?> this month / <?php echo dash_num($todayAgreements); ?> today</div>
+            </div>
+            <div class="dash-card metric-card green">
+                <div class="icon"><i class="fa fa-check-square-o"></i></div>
+                <h3>Generated Stones</h3>
+                <div class="value"><?php echo dash_num($generatedBookedStones); ?></div>
+                <div class="hint"><?php echo $generationCompletion; ?>% of booked rows generated</div>
+            </div>
+            <div class="dash-card metric-card amber">
+                <div class="icon"><i class="fa fa-clock-o"></i></div>
+                <h3>Pending Feeding</h3>
+                <div class="value"><?php echo dash_num($pendingBookedStones); ?></div>
+                <div class="hint">Booked rows not generated yet</div>
+            </div>
+            <div class="dash-card metric-card cyan">
+                <div class="icon"><i class="fa fa-inr"></i></div>
+                <h3>Month Testing</h3>
+                <div class="value" style="font-size:17px"><?php echo dash_money($monthTestingCharges); ?></div>
+                <div class="hint"><?php echo dash_money($totalTestingCharges); ?> lifetime testing charges</div>
             </div>
         </div>
 
@@ -333,25 +454,130 @@ include "assets/navbar.php";
 
             <div class="dash-card">
                 <div class="card-head">
-                    <h3>Certificate Usage</h3>
-                    <p>Total certificate records for this branch account.</p>
+                    <h3>Agreement Workflow</h3>
+                    <p>Current agreement delivery and processing position.</p>
                 </div>
                 <div class="card-body">
-                    <div class="quota-summary">
-                        <div class="quota-box">
-                            <span>Created</span>
-                            <strong><?php echo dash_num($totalReports); ?></strong>
+                    <div class="mini-ring-row">
+                        <div class="quality-ring" style="background:conic-gradient(#0891b2 <?php echo $deliveryCompletion; ?>%, #ececf1 0);">
+                            <div class="quality-ring-inner">
+                                <strong><?php echo $deliveryCompletion; ?>%</strong>
+                                <span>delivered</span>
+                            </div>
                         </div>
-                        <div class="quota-box">
-                            <span>Access</span>
-                            <strong>Unlimited</strong>
-                        </div>
-                        <div class="quota-box">
-                            <span>This month</span>
-                            <strong><?php echo dash_num($monthReports); ?></strong>
+                        <div class="status-grid">
+                            <div class="status-card"><span>In Process</span><strong><?php echo dash_num($inProcessAgreements); ?></strong></div>
+                            <div class="status-card"><span>Ready</span><strong><?php echo dash_num($readyAgreements); ?></strong></div>
+                            <div class="status-card"><span>Delivered</span><strong><?php echo dash_num($deliveredAgreements); ?></strong></div>
+                            <div class="status-card"><span>Cancelled</span><strong><?php echo dash_num($cancelledAgreements); ?></strong></div>
                         </div>
                     </div>
-                    <p class="quota-note">This customized installation has unlimited certificate access and no payment-gateway restriction.</p>
+                    <?php foreach ($statusRows as $row): ?>
+                        <?php $statusPercent = dash_pct((int) $row['total'], max(1, $totalAgreements)); ?>
+                        <div class="progress-row">
+                            <div class="progress-top"><span><?php echo htmlspecialchars(agreement_status_label($row['label'])); ?></span><span><?php echo dash_num($row['total']); ?></span></div>
+                            <div class="progress-track"><div class="progress-fill cyan" style="width: <?php echo $statusPercent; ?>%;"></div></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="dash-grid three-grid">
+            <div class="dash-card">
+                <div class="card-head">
+                    <h3>Payment Summary</h3>
+                    <p>Testing amount, received amount and dues.</p>
+                </div>
+                <div class="card-body">
+                    <div class="money-grid">
+                        <div class="money-box"><span>Testing</span><strong><?php echo dash_money($totalTestingCharges); ?></strong></div>
+                        <div class="money-box"><span>Received</span><strong><?php echo dash_money($totalPaidAmount); ?></strong></div>
+                        <div class="money-box due"><span>Due</span><strong><?php echo dash_money($totalDueAmount); ?></strong></div>
+                    </div>
+                    <div style="height:8px"></div>
+                    <?php foreach ($paymentRows as $row): ?>
+                        <?php $paymentPercent = $row['total'] > 0 ? max(3, round(((float) $row['total'] / $maxPayment) * 100)) : 0; ?>
+                        <div class="split-row">
+                            <div class="split-label"><?php echo htmlspecialchars($row['label']); ?></div>
+                            <div class="progress-track"><div class="progress-fill green" style="width: <?php echo $paymentPercent; ?>%;"></div></div>
+                            <div class="split-value"><?php echo dash_money($row['total']); ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <div class="dash-card">
+                <div class="card-head">
+                    <h3>Booked Certificate Status</h3>
+                    <p>Rows created from agreements versus generated reports.</p>
+                </div>
+                <div class="card-body">
+                    <div class="quality-ring" style="background:conic-gradient(#16a34a <?php echo $generationCompletion; ?>%, #ececf1 0);">
+                        <div class="quality-ring-inner">
+                            <strong><?php echo $generationCompletion; ?>%</strong>
+                            <span>generated</span>
+                        </div>
+                    </div>
+                    <div class="type-list">
+                        <div class="type-pill"><strong>Total booked rows</strong><span><?php echo dash_num($bookedStones); ?></span></div>
+                        <?php foreach ($bookingStatusRows as $row): ?>
+                            <div class="type-pill"><strong><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string) $row['label']))); ?></strong><span><?php echo dash_num($row['total']); ?></span></div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dash-card">
+                <div class="card-head">
+                    <h3>Image Folders</h3>
+                    <p>Files available for reports and builders.</p>
+                </div>
+                <div class="card-body">
+                    <?php foreach ($imageFolderRows as $row): ?>
+                        <?php $folderPercent = $row['total'] > 0 ? max(4, round(((int) $row['total'] / $maxImageFolder) * 100)) : 0; ?>
+                        <div class="split-row">
+                            <div class="split-label"><?php echo htmlspecialchars($row['label']); ?></div>
+                            <div class="progress-track"><div class="progress-fill" style="width: <?php echo $folderPercent; ?>%;"></div></div>
+                            <div class="split-value"><?php echo dash_num($row['total']); ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="dash-grid insight-grid">
+            <div class="dash-card">
+                <div class="card-head">
+                    <h3>Top Customers</h3>
+                    <p>Customers by agreement count and testing value.</p>
+                </div>
+                <div class="card-body">
+                    <?php if ($customerRows): foreach ($customerRows as $row): ?>
+                        <div class="progress-row">
+                            <div class="progress-top"><span><?php echo htmlspecialchars($row['label']); ?></span><span><?php echo dash_num($row['total']); ?> / <?php echo dash_money($row['amount']); ?></span></div>
+                            <div class="progress-track"><div class="progress-fill amber" style="width: <?php echo round(((int)$row['total'] / $maxCustomer) * 100); ?>%;"></div></div>
+                        </div>
+                    <?php endforeach; else: ?>
+                        <div class="empty-state">Customer insights will appear after agreements are created.</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="dash-card">
+                <div class="card-head">
+                    <h3>Top Agreement Categories</h3>
+                    <p>Most used rate categories in agreement rows.</p>
+                </div>
+                <div class="card-body">
+                    <?php if ($categoryRows): foreach ($categoryRows as $row): ?>
+                        <div class="progress-row">
+                            <div class="progress-top"><span><?php echo htmlspecialchars($row['label']); ?></span><span><?php echo dash_num($row['total']); ?> / <?php echo dash_money($row['amount']); ?></span></div>
+                            <div class="progress-track"><div class="progress-fill rose" style="width: <?php echo round(((int)$row['total'] / $maxCategory) * 100); ?>%;"></div></div>
+                        </div>
+                    <?php endforeach; else: ?>
+                        <div class="empty-state">Category insights will appear after agreement rows are added.</div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -396,7 +622,7 @@ include "assets/navbar.php";
             </div>
         </div>
 
-        <div class="dash-card" style="margin-top:18px;">
+        <div class="dash-card" style="margin-top:10px;">
             <div class="card-head">
                 <h3>Recent Certificates</h3>
                 <p>Latest reports entered in this account.</p>

@@ -190,20 +190,158 @@ function a4_symbol_font_file()
     return '';
 }
 
-function a4_pick_stone_file($record)
+function a4_pick_record_image_file($record, $folder = 'st_images')
 {
     $recordUserId = isset($record['user_id']) ? (int) $record['user_id'] : auth_current_user_id();
     $certiNo = isset($record['certi_no']) ? (string) $record['certi_no'] : '';
-    if (isset($GLOBALS['conn'])) {
-        return atm_branch_stone_path_for_user($GLOBALS['conn'], $recordUserId, $certiNo);
+    $folder = trim((string) $folder, '/\\');
+    if ($folder === '') {
+        $folder = 'st_images';
     }
-    $legacy = __DIR__ . '/user_data/user_' . $recordUserId . '/st_images/' . $certiNo . '.jpg';
+    if (isset($GLOBALS['conn'])) {
+        return atm_branch_image_path_for_user($GLOBALS['conn'], $recordUserId, $certiNo, $folder);
+    }
+    $legacy = __DIR__ . '/user_data/user_' . $recordUserId . '/' . $folder . '/' . $certiNo . '.jpg';
     return is_file($legacy) ? $legacy : '';
+}
+
+function a4_pick_stone_file($record)
+{
+    return a4_pick_record_image_file($record, 'st_images');
+}
+
+function a4_record_value($record, $key)
+{
+    if (isset($record[$key])) {
+        return $record[$key];
+    }
+    $upper = strtoupper($key);
+    if (isset($record[$upper])) {
+        return $record[$upper];
+    }
+    return '';
+}
+
+function a4_compare_condition_value($left, $operator, $right)
+{
+    $left = trim((string) $left);
+    $right = trim((string) $right);
+    $right = preg_replace('/^([\'"])(.*)\1$/', '$2', $right);
+    if (is_numeric($left) && is_numeric($right)) {
+        $leftValue = (float) $left;
+        $rightValue = (float) $right;
+    } else {
+        $leftValue = strtolower($left);
+        $rightValue = strtolower($right);
+    }
+    switch ($operator) {
+        case '=':
+        case '==':
+            return $leftValue == $rightValue;
+        case '!=':
+        case '<>':
+            return $leftValue != $rightValue;
+        case '>':
+            return $leftValue > $rightValue;
+        case '<':
+            return $leftValue < $rightValue;
+        case '>=':
+            return $leftValue >= $rightValue;
+        case '<=':
+            return $leftValue <= $rightValue;
+    }
+    return false;
+}
+
+function a4_condition_matches($condition, $record)
+{
+    $condition = trim((string) $condition);
+    if ($condition === '') {
+        return true;
+    }
+    $orParts = preg_split('/\s+or\s+/i', $condition);
+    foreach ($orParts as $orPart) {
+        $andParts = preg_split('/\s+and\s+/i', trim($orPart));
+        $allMatched = true;
+        foreach ($andParts as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            if (!preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\s*(==|=|!=|<>|>=|<=|>|<)\s*(.+)$/', $part, $match)) {
+                $allMatched = false;
+                break;
+            }
+            if (!a4_compare_condition_value(a4_record_value($record, $match[1]), $match[2], $match[3])) {
+                $allMatched = false;
+                break;
+            }
+        }
+        if ($allMatched) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function a4_record_symbols($record)
+{
+    $symbols = [];
+    $rawJson = trim((string) a4_record_value($record, 'diamond_symbols_json'));
+    if ($rawJson !== '') {
+        $decoded = json_decode($rawJson, true);
+        if (is_array($decoded)) {
+            foreach ($decoded as $symbol) {
+                $symbol = trim((string) $symbol);
+                if ($symbol !== '' && !in_array($symbol, $symbols, true)) {
+                    $symbols[] = $symbol;
+                }
+                if (count($symbols) >= 3) {
+                    break;
+                }
+            }
+        }
+    }
+    foreach (['ws1', 'ws2', 'ws3'] as $column) {
+        if (count($symbols) >= 3) {
+            break;
+        }
+        $symbol = trim((string) a4_record_value($record, $column));
+        if ($symbol !== '' && !in_array($symbol, $symbols, true)) {
+            $symbols[] = $symbol;
+        }
+    }
+    return array_slice($symbols, 0, 3);
+}
+
+function a4_pick_symbol_file($record, $symbol)
+{
+    $symbol = trim((string) $symbol);
+    if ($symbol === '') {
+        return '';
+    }
+    $recordUserId = isset($record['user_id']) ? (int) $record['user_id'] : auth_current_user_id();
+    if (isset($GLOBALS['conn'])) {
+        return atm_branch_image_path_for_user($GLOBALS['conn'], $recordUserId, $symbol, 'symbol_images', ['png', 'jpg', 'jpeg', 'PNG', 'JPG', 'JPEG']);
+    }
+    $safe = preg_replace('/[^0-9A-Za-z _.-]/', '', $symbol);
+    foreach (['png', 'jpg', 'jpeg', 'PNG', 'JPG', 'JPEG'] as $ext) {
+        $legacy = __DIR__ . '/user_data/user_' . $recordUserId . '/symbol_images/' . $safe . '.' . $ext;
+        if (is_file($legacy)) {
+            return $legacy;
+        }
+        $asset = __DIR__ . '/assets/symbol_images/' . $safe . '.' . $ext;
+        if (is_file($asset)) {
+            return $asset;
+        }
+    }
+    return '';
 }
 
 function a4_draw_text_field($canvas, $field, $record, $settings, $scaleX, $scaleY, $fontFile, $boldFont, $textColor)
 {
     if (!isset($field['display']) || $field['display'] === 'none') return;
+    if (!a4_condition_matches($field['condition'] ?? '', $record)) return;
 
     $x = (int) round(((float) ($field['x'] ?? 0)) * $scaleX);
     $y = (int) round(((float) ($field['y'] ?? 0)) * $scaleY);
@@ -243,12 +381,32 @@ function a4_draw_text_field($canvas, $field, $record, $settings, $scaleX, $scale
     $valueAlign = isset($field['valueAlign']) ? (string) $field['valueAlign'] : 'left';
     $showColon = $showLabel && (!isset($field['showColon']) || $field['showColon'] !== 'none');
 
-    $fieldTextColor = isset($field['fontColor']) && preg_match('/^#[0-9a-fA-F]{6}$/', $field['fontColor'])
-        ? a4_hex_color($canvas, $field['fontColor'])
-        : $textColor;
+    $fieldColorHex = isset($field['fontColor']) && preg_match('/^#[0-9a-fA-F]{6}$/', $field['fontColor'])
+        ? $field['fontColor']
+        : '';
+    $labelColorHex = isset($field['labelFontColor']) && preg_match('/^#[0-9a-fA-F]{6}$/', $field['labelFontColor'])
+        ? $field['labelFontColor']
+        : $fieldColorHex;
+    $valueColorHex = isset($field['valueFontColor']) && preg_match('/^#[0-9a-fA-F]{6}$/', $field['valueFontColor'])
+        ? $field['valueFontColor']
+        : $fieldColorHex;
+    $labelTextColor = $labelColorHex !== '' ? a4_hex_color($canvas, $labelColorHex) : $textColor;
+    $valueTextColor = $valueColorHex !== '' ? a4_hex_color($canvas, $valueColorHex) : $textColor;
     $fieldFamily = isset($field['fontFamily']) ? trim((string) $field['fontFamily']) : '';
     if ($fieldFamily !== '' && a4_font_family_allowed($fieldFamily)) {
         [$fontFile, $boldFont] = a4_font_files($fieldFamily);
+    }
+    $labelFamily = isset($field['labelFontFamily']) ? trim((string) $field['labelFontFamily']) : '';
+    $valueFamily = isset($field['valueFontFamily']) ? trim((string) $field['valueFontFamily']) : '';
+    $labelFontFile = $fontFile;
+    $labelBoldFont = $boldFont;
+    $valueFontFile = $fontFile;
+    $valueBoldFont = $boldFont;
+    if ($labelFamily !== '' && a4_font_family_allowed($labelFamily)) {
+        [$labelFontFile, $labelBoldFont] = a4_font_files($labelFamily);
+    }
+    if ($valueFamily !== '' && a4_font_family_allowed($valueFamily)) {
+        [$valueFontFile, $valueBoldFont] = a4_font_files($valueFamily);
     }
 
     if (!function_exists('imagettftext')) {
@@ -256,23 +414,23 @@ function a4_draw_text_field($canvas, $field, $record, $settings, $scaleX, $scale
         if ($showLabel) {
             $fallbackLabel = substr($label, 0, 35);
             $labelOffset = a4_align_offset($labelAlign, imagefontwidth($gdFontSize) * strlen($fallbackLabel), max(10, $labelWidth - 4));
-            imagestring($canvas, $gdFontSize, $x + (int) round($labelOffset), max(0, $y + 2), $fallbackLabel, $fieldTextColor);
+            imagestring($canvas, $gdFontSize, $x + (int) round($labelOffset), max(0, $y + 2), $fallbackLabel, $labelTextColor);
         }
         $fallbackValue = substr(($showColon ? ': ' : '') . $value, 0, 60);
         $valueOffset = a4_align_offset($valueAlign, imagefontwidth($gdFontSize) * strlen($fallbackValue), $valueWidth);
-        imagestring($canvas, $gdFontSize, $x + $labelWidth + $gap + (int) round($valueOffset), max(0, $y + 2), $fallbackValue, $fieldTextColor);
+        imagestring($canvas, $gdFontSize, $x + $labelWidth + $gap + (int) round($valueOffset), max(0, $y + 2), $fallbackValue, $valueTextColor);
         return;
     }
 
     $labelIsBold = isset($field['labelFontWeight']) && $field['labelFontWeight'] === 'bold';
-    $labelFont = $labelIsBold ? $boldFont : $fontFile;
+    $labelFont = $labelIsBold ? $labelBoldFont : $labelFontFile;
     if ($showLabel && is_file($labelFont) && function_exists('imagettftext')) {
         $label = a4_fit_text($label, $fontSize, $labelFont, max(10, $labelWidth - 4));
         $labelOffset = a4_align_offset($labelAlign, a4_text_width($fontSize, $labelFont, $label), max(10, $labelWidth - 4));
-        a4_draw_ttf_text($canvas, $fontSize, $x + (int) round($labelOffset), $baseline, $fieldTextColor, $labelFont, $label, $labelIsBold);
+        a4_draw_ttf_text($canvas, $fontSize, $x + (int) round($labelOffset), $baseline, $labelTextColor, $labelFont, $label, $labelIsBold);
     }
     $valueIsBold = isset($field['fontWeight']) && $field['fontWeight'] === 'bold';
-    $valueFont = $isTickField ? a4_symbol_font_file() : ($valueIsBold ? $boldFont : $fontFile);
+    $valueFont = $isTickField ? a4_symbol_font_file() : ($valueIsBold ? $valueBoldFont : $valueFontFile);
     if ($valueFont === '') {
         $valueFont = $fontFile;
     }
@@ -285,7 +443,56 @@ function a4_draw_text_field($canvas, $field, $record, $settings, $scaleX, $scale
             $lineBaseline = $baseline + ($lineIndex * $lineHeight);
             if ($lineBaseline > $y + $h) break;
             $valueOffset = a4_align_offset($valueAlign, a4_text_width($fontSize, $valueFont, $lineText), $valueWidth);
-            a4_draw_ttf_text($canvas, $fontSize, $x + $labelWidth + $gap + (int) round($valueOffset), $lineBaseline, $fieldTextColor, $valueFont, $lineText, !$isTickField && $valueIsBold);
+            a4_draw_ttf_text($canvas, $fontSize, $x + $labelWidth + $gap + (int) round($valueOffset), $lineBaseline, $valueTextColor, $valueFont, $lineText, !$isTickField && $valueIsBold);
+        }
+    }
+}
+
+function a4_draw_additional_texts($canvas, $record, $settings, $scaleX, $scaleY, $fontFile, $boldFont)
+{
+    if (empty($settings['additionalTexts']) || !is_array($settings['additionalTexts'])) {
+        return;
+    }
+    foreach ($settings['additionalTexts'] as $item) {
+        if (!is_array($item) || ($item['display'] ?? 'block') === 'none') {
+            continue;
+        }
+        if (!a4_condition_matches($item['condition'] ?? '', $record)) {
+            continue;
+        }
+        $text = trim((string) ($item['text'] ?? ''));
+        if ($text === '') {
+            continue;
+        }
+        $x = (int) round(((float) ($item['x'] ?? 0)) * $scaleX);
+        $y = (int) round(((float) ($item['y'] ?? 0)) * $scaleY);
+        $w = (int) round(((float) ($item['w'] ?? 180)) * $scaleX);
+        $h = (int) round(((float) ($item['h'] ?? 40)) * $scaleY);
+        if ($w <= 0 || $h <= 0) {
+            continue;
+        }
+        $fontSize = max(6, (int) round(((float) ($item['fontSize'] ?? 12)) * $scaleY));
+        $family = trim((string) ($item['fontFamily'] ?? ''));
+        $regular = $fontFile;
+        $bold = $boldFont;
+        if ($family !== '' && a4_font_family_allowed($family)) {
+            [$regular, $bold] = a4_font_files($family);
+        }
+        $useFont = (($item['fontWeight'] ?? '') === 'bold') ? $bold : $regular;
+        $color = a4_hex_color($canvas, $item['fontColor'] ?? '#000000');
+        $lineHeight = max($fontSize + 2, (int) round($fontSize * 1.25));
+        $maxLines = max(1, (int) floor($h / $lineHeight));
+        $lines = a4_wrap_text_lines($text, $fontSize, $useFont, $w, $maxLines);
+        $align = in_array(($item['align'] ?? 'left'), ['left', 'center', 'right'], true) ? $item['align'] : 'left';
+        foreach ($lines as $lineIndex => $lineText) {
+            $baseline = $y + $fontSize + ($lineIndex * $lineHeight);
+            if ($baseline > $y + $h) break;
+            $offset = a4_align_offset($align, a4_text_width($fontSize, $useFont, $lineText), $w);
+            if (is_file($useFont) && function_exists('imagettftext')) {
+                a4_draw_ttf_text($canvas, $fontSize, $x + (int) round($offset), $baseline, $color, $useFont, $lineText, ($item['fontWeight'] ?? '') === 'bold');
+            } else {
+                imagestring($canvas, 2, $x + (int) round($offset), $y + ($lineIndex * $lineHeight), $lineText, $color);
+            }
         }
     }
 }
@@ -322,6 +529,66 @@ function a4_draw_additional_images($canvas, $settings, $scaleX, $scaleY)
     }
 }
 
+function a4_draw_symbol_key($canvas, $record, $settings, $scaleX, $scaleY, $fontFile, $textColor)
+{
+    $box = isset($settings['symbolKey']) && is_array($settings['symbolKey']) ? $settings['symbolKey'] : [];
+    if (($box['display'] ?? 'none') === 'none') {
+        return;
+    }
+    $symbols = a4_record_symbols($record);
+    if (!$symbols) {
+        return;
+    }
+
+    $x = (int) round(((float) ($box['x'] ?? 0)) * $scaleX);
+    $y = (int) round(((float) ($box['y'] ?? 0)) * $scaleY);
+    $w = (int) round(((float) ($box['w'] ?? 220)) * $scaleX);
+    $h = (int) round(((float) ($box['h'] ?? 120)) * $scaleY);
+    if ($w <= 20 || $h <= 20) {
+        return;
+    }
+
+    $fontSize = max(6, (int) round(((float) ($box['fontSize'] ?? 10)) * $scaleY));
+    $lineHeight = max($fontSize + 10, (int) round($fontSize * 2.1));
+    $paddingX = max(4, (int) round(8 * $scaleX));
+    $paddingY = max(4, (int) round(8 * $scaleY));
+
+    $rowY = $y + $paddingY;
+    foreach ($symbols as $index => $symbol) {
+        if ($rowY > $y + $h - 3) {
+            break;
+        }
+        $number = ($index + 1) . '.';
+        $numberX = $x + $paddingX + (int) round(2 * $scaleX);
+        $imageX = $x + $paddingX + (int) round(28 * $scaleX);
+        $nameX = $x + $paddingX + (int) round(70 * $scaleX);
+        $baseline = $rowY + $fontSize;
+
+        if (is_file($fontFile) && function_exists('imagettftext')) {
+            a4_draw_ttf_text($canvas, $fontSize, $numberX, $baseline, $textColor, $fontFile, $number, false);
+        } else {
+            imagestring($canvas, 1, $numberX, $rowY, $number, $textColor);
+        }
+
+        $symbolFile = a4_pick_symbol_file($record, $symbol);
+        $symbolImage = $symbolFile !== '' ? a4_load_image_resource($symbolFile) : false;
+        if ($symbolImage) {
+            $imageSize = max(10, min((int) round(24 * $scaleY), $lineHeight - 2));
+            imagecopyresampled($canvas, $symbolImage, $imageX, $rowY + 2, 0, 0, $imageSize, $imageSize, imagesx($symbolImage), imagesy($symbolImage));
+            imagedestroy($symbolImage);
+        }
+
+        $nameMaxWidth = max(20, $x + $w - $nameX - $paddingX);
+        if (is_file($fontFile) && function_exists('imagettftext')) {
+            $name = a4_fit_text((string) $symbol, $fontSize, $fontFile, $nameMaxWidth);
+            a4_draw_ttf_text($canvas, $fontSize, $nameX, $baseline, $textColor, $fontFile, $name, false);
+        } else {
+            imagestring($canvas, 1, $nameX, $rowY, substr((string) $symbol, 0, 28), $textColor);
+        }
+        $rowY += $lineHeight;
+    }
+}
+
 function a4_build_report_canvas($record, $settings = null)
 {
     $settings = is_array($settings) ? $settings : a4_read_settings();
@@ -347,16 +614,26 @@ function a4_build_report_canvas($record, $settings = null)
         }
     }
 
-    if (isset($settings['stoneImage']) && is_array($settings['stoneImage'])) {
-        $stoneFile = a4_pick_stone_file($record);
-        $stone = $stoneFile ? a4_load_image_resource($stoneFile) : false;
-        if ($stone) {
-            a4_copy_box($canvas, $stone, $settings['stoneImage'], $scaleX, $scaleY);
-            imagedestroy($stone);
+    $recordImageBoxes = [
+        'stoneImage' => 'st_images',
+        'proportionImage' => 'proportion_images',
+        'clarityImage' => 'clarity_images',
+    ];
+    foreach ($recordImageBoxes as $boxKey => $folder) {
+        if (!isset($settings[$boxKey]) || !is_array($settings[$boxKey])) {
+            continue;
+        }
+        $imageFile = a4_pick_record_image_file($record, $folder);
+        $image = $imageFile ? a4_load_image_resource($imageFile) : false;
+        if ($image) {
+            a4_copy_box($canvas, $image, $settings[$boxKey], $scaleX, $scaleY);
+            imagedestroy($image);
         }
     }
 
     a4_draw_additional_images($canvas, $settings, $scaleX, $scaleY);
+    a4_draw_symbol_key($canvas, $record, $settings, $scaleX, $scaleY, $fontFile, $textColor);
+    a4_draw_additional_texts($canvas, $record, $settings, $scaleX, $scaleY, $fontFile, $boldFont);
 
     if (isset($settings['qrCode']) && is_array($settings['qrCode']) && $settings['qrCode']['display'] !== 'none') {
         $qrSettings = isset($settings['qrSettings']) && is_array($settings['qrSettings']) ? $settings['qrSettings'] : atm_default_qr_settings();

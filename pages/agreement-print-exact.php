@@ -1322,6 +1322,23 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                 page-break-inside: avoid
             }
 
+            .items tr.cancelled-row td {
+                background: #f7f7f7;
+                color: #555;
+                text-decoration: none
+            }
+
+            .cancelled-badge {
+                border: 1px solid #555;
+                display: inline-block;
+                font-size: 7.5px;
+                font-weight: 700;
+                line-height: 1.1;
+                margin-top: 2px;
+                padding: 1px 3px;
+                text-transform: uppercase
+            }
+
             .items td:first-child {
                 width: 4%
             }
@@ -1873,7 +1890,8 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                 </thead>
                 <tbody>
                     <?php foreach ($items as $index => $item): ?>
-                        <tr>
+                        <?php $rowCancelled = strtolower(trim((string) ($item['row_status'] ?? 'active'))) === 'cancelled'; ?>
+                        <tr class="<?php echo $rowCancelled ? 'cancelled-row' : ''; ?>">
                             <td><?php echo $index + 1; ?></td>
                             <td class="ref wrap"><?php echo agreement_wrap_text($item['ref_no'] ?? '', 22); ?></td>
                             <td class="category wrap"><?php echo agreement_wrap_text($item['category'] ?? '', 24); ?></td>
@@ -1897,7 +1915,7 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                             $discountPercent = (float) ($item['discount_percent'] ?? 0);
                             echo $discountAmount > 0 ? agreement_wrap_text(agreement_money($discountAmount) . ' (' . rtrim(rtrim(number_format($discountPercent, 2, '.', ''), '0'), '.') . '%)', 12) : '';
                             ?></td> -->
-                            <td class="amount wrap"><?php echo agreement_wrap_text($item['amount'] ?? '', 10); ?></td>
+                            <td class="amount wrap"><?php echo agreement_wrap_text($item['amount'] ?? '', 10); ?><?php echo $rowCancelled ? '<br><span class="cancelled-badge">Cancelled</span>' : ''; ?></td>
                         </tr><?php endforeach; ?>
                 </tbody>
             </table>

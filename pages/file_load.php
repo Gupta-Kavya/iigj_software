@@ -1,14 +1,22 @@
 <?php
 require_once 'auth.php';
 auth_require_login();
+require_once 'db_connect.php';
 require_once 'atm_config.php';
-$upload_directory = atm_user_stone_dir() . '/';
-$upload_url = 'user_data/user_' . auth_current_user_id() . '/st_images/';
+
+function image_manager_folder()
+{
+	$folder = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($_POST['folder'] ?? 'st_images'));
+	return in_array($folder, ['st_images', 'symbol_images', 'clarity_images', 'proportion_images'], true) ? $folder : 'st_images';
+}
+
+$image_folder = image_manager_folder();
+$upload_directory = atm_user_image_dir($image_folder) . '/';
 $per_page = 50;
 $page = isset($_POST['page']) ? (int) $_POST['page'] : 1;
 $search = isset($_POST['search']) ? trim((string) $_POST['search']) : '';
 
-$image_files = glob($upload_directory . '*.{jpg,jpeg,JPG}', GLOB_BRACE);
+$image_files = glob($upload_directory . '*.{jpg,jpeg,png,JPG,JPEG,PNG}', GLOB_BRACE);
 if (is_array($image_files)) {
 	natcasesort($image_files);
 	$image_files = array_values($image_files);
@@ -46,7 +54,7 @@ if (empty($paged_images) == false) {
 	foreach ($paged_images as $image) {
 		$image_name = basename($image);
 		$safe_name = htmlspecialchars($image_name, ENT_QUOTES, 'UTF-8');
-		$safe_url = htmlspecialchars($upload_url . rawurlencode($image_name), ENT_QUOTES, 'UTF-8');
+		$safe_url = htmlspecialchars(atm_user_image_relative(rawurlencode($image_name), $image_folder), ENT_QUOTES, 'UTF-8');
 		$input_id = 'image_item_' . $index;
 		$size = filesize($upload_directory . $image_name);
 

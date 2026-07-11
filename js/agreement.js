@@ -23,12 +23,23 @@
     var rateConditionRules = [];
     var rateOptionsHtml = '<option value="">Select category</option>';
     var colourOptionsHtml = '';
+    var freshAgreementNo = form ? String(form.dataset.agreementNo || "") : "";
+    var freshNextCertiNo = form ? String(form.dataset.nextCertiNo || "1") : "1";
+    var suppressResetHandler = false;
+
+    function selectedCollectionCode() {
+        var select = document.getElementById("collection_center_id");
+        var option = select && select.options[select.selectedIndex];
+        var code = option ? String(option.getAttribute("data-code") || "") : "";
+        code = code.toUpperCase().replace(/[^A-Z0-9]/g, "").charAt(0);
+        return code || (form.dataset.locationLetter || "S").toUpperCase().charAt(0) || "S";
+    }
 
     function rowTemplate(index) {
         var name = "items[" + index + "]";
         var unitOptions = '<option value="ct" selected>ct</option><option value="gms">gms</option><option value="kg">kg</option>';
         return '<tr>' +
-            '<td class="row-no"></td>' +
+            '<td><span class="row-no"></span><input type="hidden" class="row-status-input" name="' + name + '[row_status]" value="active"><input type="hidden" class="row-cancel-reason-input" name="' + name + '[row_cancel_reason]" value=""></td>' +
             '<td><input class="form-control ref-input" name="' + name + '[ref_no]" readonly></td>' +
             '<td><select class="form-control rate-category" name="' + name + '[category]">' + rateOptionsHtml + '</select></td>' +
             '<td><input class="form-control" name="' + name + '[particulars]"></td>' +
@@ -43,17 +54,61 @@
             '<td><input class="form-control money-input rate-input" name="' + name + '[rate]"></td>' +
             '<td><input class="form-control money-input discount-input" name="' + name + '[discount_amount]" readonly><input type="hidden" class="discount-percent-input" name="' + name + '[discount_percent]"></td>' +
             '<td><input class="form-control money-input amount-input" name="' + name + '[amount]"></td>' +
-            '<td><button type="button" class="btn btn-default remove-row" title="Remove row"><i class="fa fa-trash-o"></i></button></td>' +
+            '<td><button type="button" class="btn btn-default remove-row row-action" title="Remove row"><i class="fa fa-trash-o"></i></button></td>' +
         '</tr>';
+    }
+
+    function isRowCancelled(row) {
+        var status = row ? row.querySelector(".row-status-input") : null;
+        return status && String(status.value || "").toLowerCase() === "cancelled";
+    }
+
+    function syncRowActionButtons() {
+        var editing = form && form.dataset.editMode === "1";
+        Array.prototype.forEach.call(body.querySelectorAll("tr"), function (row) {
+            var button = row.querySelector(".row-action");
+            if (!button) return;
+            if (editing) {
+                if (isRowCancelled(row)) {
+                    button.className = "btn btn-warning row-action undo-cancel-row";
+                    button.title = "Undo row cancellation";
+                    button.innerHTML = '<i class="fa fa-undo"></i>';
+                } else {
+                    button.className = "btn btn-danger row-action cancel-row";
+                    button.title = "Cancel row";
+                    button.innerHTML = '<i class="fa fa-ban"></i>';
+                }
+            } else {
+                button.className = "btn btn-default row-action remove-row";
+                button.title = "Remove row";
+                button.innerHTML = '<i class="fa fa-trash-o"></i>';
+            }
+        });
+    }
+
+    function syncRowState(row) {
+        if (!row) return;
+        var cancelled = isRowCancelled(row);
+        row.classList.toggle("agreement-row-cancelled", cancelled);
+        Array.prototype.forEach.call(row.querySelectorAll("input:not([type='hidden']), textarea"), function (input) {
+            if (input.classList.contains("ref-input")) return;
+            input.readOnly = cancelled;
+            input.tabIndex = cancelled ? -1 : 0;
+        });
+        Array.prototype.forEach.call(row.querySelectorAll("select, .topup-input"), function (control) {
+            control.tabIndex = cancelled ? -1 : 0;
+        });
+        syncRowActionButtons();
     }
 
     function renumberRows() {
         var agreementNo = parseInt(form.dataset.agreementNo || "0", 10) || 0;
         var nextCertiNo = parseInt(form.dataset.nextCertiNo || "1", 10) || 1;
-        var locationLetter = (form.dataset.locationLetter || "S").toUpperCase().charAt(0) || "S";
+        var locationLetter = selectedCollectionCode();
         Array.prototype.forEach.call(body.querySelectorAll("tr"), function (row, index) {
             row.querySelector(".row-no").textContent = index + 1;
             var ref = row.querySelector(".ref-input");
+            if (form.dataset.editMode === "1" && ref && ref.value) return;
             if (ref) ref.value = agreementNo + locationLetter + (nextCertiNo + index);
         });
     }
@@ -62,9 +117,121 @@
         var index = Date.now().toString(36) + Math.floor(Math.random() * 1000);
         var holder = document.createElement("tbody");
         holder.innerHTML = rowTemplate(index);
-        body.appendChild(holder.firstChild);
+        var row = holder.firstChild;
+        body.appendChild(row);
         renumberRows();
+        syncRowState(row);
+        updatePcsTotal();
         if (focus) body.querySelector("tr:last-child input").focus();
+        return row;
+    }
+
+    function setInputValue(selector, value) {
+        var el = document.querySelector(selector);
+        if (el) el.value = value == null ? "" : String(value);
+    }
+
+    function setSelectValue(select, value) {
+        if (!select) return;
+        value = value == null ? "" : String(value);
+        if (value !== "" && !Array.prototype.some.call(select.options, function (option) { return option.value === value; })) {
+            var option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+        }
+        select.value = value;
+    }
+
+    function populateAgreementRow(row, item) {
+        item = item || {};
+        [
+            "ref_no", "particulars", "color", "gross_wt", "stone_wt", "dia_wt", "bead_length", "pcs",
+            "rate", "discount_amount", "discount_percent", "amount"
+        ].forEach(function (key) {
+            var input = row.querySelector('[name$="[' + key + ']"]');
+            if (input) input.value = item[key] == null ? "" : String(item[key]);
+        });
+        setSelectValue(row.querySelector('[name$="[category]"]'), item.category || "");
+        setSelectValue(row.querySelector('[name$="[gross_wt_unit]"]'), item.gross_wt_unit || "ct");
+        setSelectValue(row.querySelector('[name$="[stone_wt_unit]"]'), item.stone_wt_unit || "ct");
+        setSelectValue(row.querySelector('[name$="[a4_card]"]'), item.a4_card || "A4");
+        var topup = row.querySelector('[name$="[topup]"]');
+        if (topup) topup.checked = String(item.topup || "") === "1";
+        var rowStatus = row.querySelector(".row-status-input");
+        if (rowStatus) rowStatus.value = String(item.row_status || "").toLowerCase() === "cancelled" ? "cancelled" : "active";
+        var cancelReason = row.querySelector(".row-cancel-reason-input");
+        if (cancelReason) cancelReason.value = item.row_cancel_reason == null ? "" : String(item.row_cancel_reason);
+        if (!row.querySelector('[name$="[pcs]"]').value) row.querySelector('[name$="[pcs]"]').value = "1";
+        syncRowState(row);
+    }
+
+    function setEditMode(agreement) {
+        var editing = !!agreement;
+        form.dataset.editMode = editing ? "1" : "0";
+        $("#edit_agreement_id").val(editing ? agreement.id : "");
+        $("#edit_agreement_no").val(editing ? agreement.agreement_no : "");
+        $("#agreement_status_select").prop("disabled", !editing).val(editing ? (agreement.agreement_status || "IN_PROCESS") : "IN_PROCESS");
+        $("#update_agreement_status").prop("disabled", !editing);
+        $("#agreement_edit_note").text(editing ? ("Editing agreement #" + agreement.agreement_no + ". Click New to leave edit mode.") : "Load an old agreement here to update it.");
+        submit.innerHTML = editing ? '<i class="fa fa-save"></i> Update Agreement' : '<i class="fa fa-check"></i> Save Agreement';
+        syncRowActionButtons();
+    }
+
+    function populateAgreementForm(agreement) {
+        if (!agreement) return;
+        suppressResetHandler = true;
+        form.reset();
+        suppressResetHandler = false;
+        body.innerHTML = "";
+        form.dataset.agreementNo = String(agreement.agreement_no || "");
+        form.dataset.nextCertiNo = String(agreement.first_certificate_no || 1);
+        if (agreement.collection_center_code) {
+            form.dataset.locationLetter = String(agreement.collection_center_code || "S").toUpperCase().charAt(0) || "S";
+        }
+        $("#agreement_serial_no").val(agreement.agreement_no || "");
+        setSelectValue(document.getElementById("collection_center_id"), agreement.collection_center_id || "");
+        $("#customer_master_id").val(agreement.customer_master_id || "");
+        setInputValue("#docket_no", agreement.docket_no);
+        setInputValue("#customer_name", agreement.customer_name);
+        setInputValue("#depositor_name", agreement.depositor_name);
+        setInputValue("#gst_no", agreement.gst_no);
+        setInputValue("#address", agreement.address);
+        setInputValue("#mobile_no", agreement.mobile_no);
+        setInputValue("#email", agreement.email);
+        setInputValue("#id_no", agreement.id_no);
+        setInputValue("#agreement_date", agreement.agreement_date);
+        setInputValue("#agreement_time", agreement.agreement_time);
+        setInputValue("#delivery_date", agreement.delivery_date);
+        setInputValue("#delivery_time", agreement.delivery_time);
+        setInputValue("#testing_charges", agreement.testing_charges);
+        setInputValue("#payment_cash", agreement.payment_cash);
+        setInputValue("#payment_cheque", agreement.payment_cheque);
+        setInputValue("#payment_neft", agreement.payment_neft);
+        setInputValue("#payment_card", agreement.payment_card);
+        setInputValue("#payment_tds", agreement.payment_tds);
+        setInputValue("#cheque_no", agreement.cheque_no);
+        setInputValue("#due_amount", agreement.due_amount);
+        setInputValue("#refund_amount", agreement.refund_amount);
+        setInputValue("#prepared_by", agreement.prepared_by);
+        setInputValue("#remarks", agreement.remarks);
+        $("#category").val(agreement.category || "Regular");
+        $("#mou_cdc").val(mouTierCode(agreement.mou_cdc || ""));
+        $("input[name='member_status'][value='" + (agreement.member_status === "Member" ? "Member" : "Non Member") + "']").prop("checked", true);
+        $("input[name='signature_mode'][value='" + (agreement.signature_mode === "esign" ? "esign" : "manual") + "']").prop("checked", true);
+        clearSignaturePad();
+        refreshSignatureMode();
+        (agreement.items || []).forEach(function (item) {
+            populateAgreementRow(addRow(false), item);
+        });
+        if (!body.querySelector("tr")) addRow(false);
+        setEditMode(agreement);
+        Array.prototype.forEach.call(body.querySelectorAll("tr"), syncRowState);
+        renumberRows();
+        refreshAllRates();
+        updatePcsTotal();
+        updateTestingCharges();
+        $("#agreement_status").hide();
     }
 
     function customerSelected() {
@@ -83,6 +250,7 @@
 
     function hasItemRow() {
         return Array.prototype.some.call(body.querySelectorAll("tr"), function (row) {
+            if (isRowCancelled(row)) return false;
             return Array.prototype.some.call(row.querySelectorAll("input,select"), function (input) {
                 if (input.classList.contains("ref-input")) return false;
                 if (input.type === "checkbox") return input.checked;
@@ -94,6 +262,7 @@
 
     function resetAgreementForm() {
         form.reset();
+        form.dataset.locationLetter = selectedCollectionCode();
     }
 
     function openAgreementPrint(printUrl) {
@@ -104,6 +273,208 @@
         }
     }
 
+    function showAgreementSavedActions(printUrl, labelsUrl) {
+        return new Promise(function (resolve) {
+            var old = document.getElementById("agreement_action_modal");
+            if (old) old.parentNode.removeChild(old);
+            var modal = document.createElement("div");
+            modal.id = "agreement_action_modal";
+            modal.innerHTML = '' +
+                '<div class="agreement-action-backdrop"></div>' +
+                '<div class="agreement-action-box" role="dialog" aria-modal="true" aria-labelledby="agreement_action_title">' +
+                '<h3 id="agreement_action_title">Agreement saved</h3>' +
+                '<p>You can generate agreement and labels one by one. Click Exit when finished.</p>' +
+                '<div class="agreement-action-buttons">' +
+                '<button type="button" class="btn btn-primary" data-action="agreement">Generate Agreement</button>' +
+                '<button type="button" class="btn btn-default" data-action="labels">Generate Labels</button>' +
+                '<button type="button" class="btn btn-default" data-action="exit">Exit</button>' +
+                '</div>' +
+                '</div>';
+            var style = document.createElement("style");
+            style.textContent = '#agreement_action_modal{position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center}.agreement-action-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.48)}.agreement-action-box{position:relative;background:#fff;border-radius:10px;box-shadow:0 24px 70px rgba(15,23,42,.25);max-width:420px;padding:20px;width:calc(100% - 32px)}.agreement-action-box h3{font-size:18px;font-weight:600;margin:0 0 6px}.agreement-action-box p{color:#525252;font-size:13px;margin:0 0 16px}.agreement-action-buttons{display:grid;gap:10px;grid-template-columns:1fr}.agreement-action-buttons .btn{border-radius:8px;min-height:42px;font-weight:600}@media(min-width:560px){.agreement-action-buttons{grid-template-columns:1fr 1fr 90px}}';
+            modal.appendChild(style);
+            document.body.appendChild(modal);
+            var escHandler = null;
+            function close(action) {
+                if (escHandler) document.removeEventListener("keydown", escHandler);
+                if (modal.parentNode) modal.parentNode.removeChild(modal);
+                resolve(action || "exit");
+            }
+            modal.addEventListener("click", function (event) {
+                var button = event.target.closest("button[data-action]");
+                if (button) {
+                    var action = button.getAttribute("data-action");
+                    if (action === "agreement") {
+                        openAgreementPrint(printUrl);
+                        return;
+                    }
+                    if (action === "labels") {
+                        openAgreementPrint(labelsUrl);
+                        return;
+                    }
+                    close(action);
+                }
+                if (event.target.className === "agreement-action-backdrop") close("exit");
+            });
+            escHandler = function (event) {
+                if (event.key === "Escape") {
+                    close("exit");
+                }
+            };
+            document.addEventListener("keydown", escHandler);
+            var first = modal.querySelector("button[data-action='agreement']");
+            if (first) first.focus();
+        }).then(function (action) {
+            return action;
+        });
+    }
+
+    function agreementSummaryValue(selector) {
+        return $.trim($(selector).val() || "");
+    }
+
+    function agreementPaymentValue(selector) {
+        var value = parseFloat(String($(selector).val() || "").replace(/[^0-9.\-]/g, ""));
+        return isNaN(value) ? "0.00" : value.toFixed(2);
+    }
+
+    function agreementRowCount() {
+        return body ? body.querySelectorAll("tr").length : 0;
+    }
+
+    function agreementFirstLastRef() {
+        var refs = Array.prototype.map.call(body.querySelectorAll(".ref-input"), function (input) {
+            return $.trim(input.value || "");
+        }).filter(Boolean);
+        if (!refs.length) return "";
+        return refs.length === 1 ? refs[0] : refs[0] + " to " + refs[refs.length - 1];
+    }
+
+    function selectedCollectionLabel() {
+        var select = document.getElementById("collection_center_id");
+        var option = select && select.options[select.selectedIndex];
+        return option ? $.trim(option.textContent || option.innerText || "") : "";
+    }
+
+    function confirmAgreementSave() {
+        var isEdit = form.dataset.editMode === "1";
+        var rows = [
+            ["Mode", isEdit ? "Update existing agreement" : "New agreement"],
+            ["Agreement No.", $("#agreement_serial_no").val() || form.dataset.agreementNo || ""],
+            ["Branch Location", form.dataset.locationName || ""],
+            ["Collection Center", selectedCollectionLabel()],
+            ["Ref No.", agreementFirstLastRef()],
+            ["Customer", agreementSummaryValue("#customer_name")],
+            ["Depositor", agreementSummaryValue("#depositor_name")],
+            ["Mobile", agreementSummaryValue("#mobile_no")],
+            ["Rows / Total PCS", agreementRowCount() + " rows / " + ($("#pcs_total_display").val() || "0") + " active pcs"],
+            ["Testing Charges", agreementPaymentValue("#testing_charges")],
+            ["Paid", (moneyValue("#payment_cash") + moneyValue("#payment_cheque") + moneyValue("#payment_neft") + moneyValue("#payment_card") + moneyValue("#payment_tds")).toFixed(2)],
+            ["Due", agreementPaymentValue("#due_amount")],
+            ["Delivery", [agreementSummaryValue("#delivery_date"), agreementSummaryValue("#delivery_time")].filter(Boolean).join(" ")]
+        ];
+        if (!window.Promise) {
+            return { then: function (next) { next(window.confirm("Confirm save agreement #" + ($("#agreement_serial_no").val() || form.dataset.agreementNo || "") + "?")); } };
+        }
+        return new Promise(function (resolve) {
+            var old = document.getElementById("agreement_confirm_modal");
+            if (old) old.parentNode.removeChild(old);
+            var modal = document.createElement("div");
+            modal.id = "agreement_confirm_modal";
+            modal.innerHTML = '' +
+                '<div class="agreement-confirm-backdrop"></div>' +
+                '<div class="agreement-confirm-box" role="dialog" aria-modal="true" aria-labelledby="agreement_confirm_title">' +
+                '<h3 id="agreement_confirm_title">Confirm Agreement Details</h3>' +
+                '<p>Please check these important details before saving.</p>' +
+                '<div class="agreement-confirm-table-wrap"><table class="agreement-confirm-table"><tbody>' +
+                rows.map(function (row) {
+                    return '<tr><th>' + escapeHtml(row[0]) + '</th><td>' + escapeHtml(row[1] || "-") + '</td></tr>';
+                }).join("") +
+                '</tbody></table></div>' +
+                '<div class="agreement-confirm-actions">' +
+                '<button type="button" class="btn btn-default" data-action="cancel">Check Again</button>' +
+                '<button type="button" class="btn btn-primary" data-action="save"><i class="fa fa-save"></i> Save Agreement</button>' +
+                '</div>' +
+                '</div>';
+            var style = document.createElement("style");
+            style.textContent = '#agreement_confirm_modal{position:fixed;inset:0;z-index:10060;display:flex;align-items:center;justify-content:center}.agreement-confirm-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.5)}.agreement-confirm-box{position:relative;background:#fff;border-radius:10px;box-shadow:0 24px 70px rgba(15,23,42,.25);max-width:560px;padding:18px;width:calc(100% - 32px)}.agreement-confirm-box h3{font-size:17px;font-weight:600;margin:0 0 5px}.agreement-confirm-box p{color:#525252;font-size:12px;margin:0 0 12px}.agreement-confirm-table-wrap{border:1px solid #ececf1;border-radius:8px;overflow:hidden}.agreement-confirm-table{border-collapse:collapse;margin:0;width:100%}.agreement-confirm-table th,.agreement-confirm-table td{border-bottom:1px solid #ececf1;font-size:12px;padding:7px 9px;vertical-align:top}.agreement-confirm-table tr:last-child th,.agreement-confirm-table tr:last-child td{border-bottom:0}.agreement-confirm-table th{background:#f7f7f8;color:#404040;font-weight:600;width:34%}.agreement-confirm-table td{color:#171717;font-weight:500;overflow-wrap:anywhere}.agreement-confirm-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}.agreement-confirm-actions .btn{border-radius:8px;min-height:38px;min-width:120px}@media(max-width:520px){.agreement-confirm-actions{flex-direction:column-reverse}.agreement-confirm-actions .btn{width:100%}}';
+            modal.appendChild(style);
+            document.body.appendChild(modal);
+            var escHandler = null;
+            function close(value) {
+                if (escHandler) document.removeEventListener("keydown", escHandler);
+                if (modal.parentNode) modal.parentNode.removeChild(modal);
+                resolve(!!value);
+            }
+            modal.addEventListener("click", function (event) {
+                var button = event.target.closest("button[data-action]");
+                if (button) {
+                    close(button.getAttribute("data-action") === "save");
+                    return;
+                }
+                if (event.target.className === "agreement-confirm-backdrop") close(false);
+            });
+            escHandler = function (event) {
+                if (event.key === "Escape") close(false);
+            };
+            document.addEventListener("keydown", escHandler);
+            var save = modal.querySelector("button[data-action='save']");
+            if (save) save.focus();
+        });
+    }
+
+    function promptAgreementRowCancel() {
+        return new Promise(function (resolve) {
+            if (!document.getElementById("agreement_cancel_reason_style")) {
+                var style = document.createElement("style");
+                style.id = "agreement_cancel_reason_style";
+                style.textContent = '#agreement_cancel_reason_modal{position:fixed;inset:0;z-index:10070;display:flex;align-items:center;justify-content:center;padding:14px}#agreement_cancel_reason_modal .cancel-reason-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.62)}#agreement_cancel_reason_modal .cancel-reason-box{position:relative;z-index:1;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 18px 48px rgba(15,23,42,.28);max-width:360px;padding:13px 14px;width:min(360px,100%)}#agreement_cancel_reason_modal .cancel-reason-box h3{color:#171717;font-size:15px;font-weight:600;line-height:1.25;margin:0 0 4px;padding:0;border:0}#agreement_cancel_reason_modal .cancel-reason-box p{color:#525252;font-size:11.5px;line-height:1.35;margin:0 0 9px}#agreement_cancel_reason_modal .cancel-reason-box label{color:#262626;display:block;font-size:11.5px;font-weight:600;margin:8px 0 5px}#agreement_cancel_reason_modal .cancel-reason-box textarea{background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:none;color:#171717;font-size:12px;line-height:1.35;min-height:68px;padding:7px 8px;resize:vertical;width:100%}#agreement_cancel_reason_modal .cancel-reason-box textarea:focus{border-color:#64748b;box-shadow:0 0 0 2px rgba(100,116,139,.15);outline:0}#agreement_cancel_reason_modal .cancel-reason-error{display:none;color:#dc2626;font-size:11.5px;margin-top:5px}#agreement_cancel_reason_modal .cancel-reason-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:11px}#agreement_cancel_reason_modal .cancel-reason-actions .btn{border-radius:6px;min-height:32px;min-width:88px;padding:5px 10px}@media(max-width:430px){#agreement_cancel_reason_modal .cancel-reason-actions{flex-direction:column-reverse}#agreement_cancel_reason_modal .cancel-reason-actions .btn{width:100%}}';
+                document.head.appendChild(style);
+            }
+            var overlay = document.createElement("div");
+            overlay.id = "agreement_cancel_reason_modal";
+            overlay.innerHTML =
+                '<div class="cancel-reason-backdrop"></div>' +
+                '<div class="cancel-reason-box" role="dialog" aria-modal="true">' +
+                    '<h3>Cancel row?</h3>' +
+                    '<p>This row will stay in the record, deduct from totals, and the customer will be notified after saving.</p>' +
+                    '<label>Cancellation reason *</label>' +
+                    '<textarea class="form-control" rows="3" maxlength="300" placeholder="Example: Stone withdrawn by customer"></textarea>' +
+                    '<div class="cancel-reason-error">Please enter cancellation reason.</div>' +
+                    '<div class="cancel-reason-actions">' +
+                        '<button type="button" class="btn btn-default" data-action="keep">Keep Row</button>' +
+                        '<button type="button" class="btn btn-danger" data-action="cancel">Cancel Row</button>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(overlay);
+            var textarea = overlay.querySelector("textarea");
+            var error = overlay.querySelector(".cancel-reason-error");
+            function close(value) {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve(value);
+            }
+            overlay.addEventListener("click", function (event) {
+                var button = event.target.closest("button[data-action]");
+                if (!button) {
+                    if (event.target === overlay || event.target.classList.contains("cancel-reason-backdrop")) close(null);
+                    return;
+                }
+                if (button.getAttribute("data-action") === "keep") {
+                    close(null);
+                    return;
+                }
+                var reason = String(textarea.value || "").trim();
+                if (!reason) {
+                    error.style.display = "block";
+                    textarea.focus();
+                    return;
+                }
+                close(reason);
+            });
+            window.setTimeout(function () { textarea.focus(); }, 0);
+        });
+    }
+
     function validateRowsBeforeSubmit() {
         var rows = Array.prototype.slice.call(body.querySelectorAll("tr"));
         if (!rows.length) {
@@ -112,6 +483,7 @@
         }
         for (var i = 0; i < rows.length; i++) {
             var row = rows[i];
+            if (isRowCancelled(row)) continue;
             var category = row.querySelector(".rate-category");
             if (!category || !category.value) {
                 AppToast.error("Select category for stone row " + (i + 1) + ".");
@@ -140,6 +512,7 @@
     function updateTestingCharges() {
         var total = 0;
         Array.prototype.forEach.call(body.querySelectorAll(".amount-input"), function (input) {
+            if (isRowCancelled(input.closest("tr"))) return;
             var value = parseFloat(String(input.value).replace(/[^0-9.\-]/g, ""));
             if (!isNaN(value)) total += value;
         });
@@ -150,6 +523,7 @@
     function updatePcsTotal() {
         var total = 0;
         Array.prototype.forEach.call(body.querySelectorAll(".pcs-input"), function (input) {
+            if (isRowCancelled(input.closest("tr"))) return;
             var value = parseInt(String(input.value).replace(/[^0-9\-]/g, ""), 10);
             if (!isNaN(value) && value > 0) total += value;
         });
@@ -164,9 +538,15 @@
     function updateDueAmount() {
         var charges = moneyValue("#testing_charges");
         var paid = moneyValue("#payment_cash") + moneyValue("#payment_cheque") + moneyValue("#payment_neft") + moneyValue("#payment_card") + moneyValue("#payment_tds");
+        var cancelledAmount = 0;
+        Array.prototype.forEach.call(body.querySelectorAll(".amount-input"), function (input) {
+            if (!isRowCancelled(input.closest("tr"))) return;
+            var value = parseFloat(String(input.value).replace(/[^0-9.\-]/g, ""));
+            if (!isNaN(value) && value > 0) cancelledAmount += value;
+        });
         var balance = charges - paid;
         $("#due_amount").val(Math.max(0, balance).toFixed(2));
-        $("#refund_amount").val(Math.max(0, -balance).toFixed(2));
+        $("#refund_amount").val(Math.max(cancelledAmount, -balance, 0).toFixed(2));
     }
 
     function escapeHtml(value) {
@@ -309,6 +689,7 @@
     }
 
     function applyRateToRow(row) {
+        if (isRowCancelled(row)) return;
         var select = row.querySelector(".rate-category");
         if (!select) return;
         var option = select.options[select.selectedIndex];
@@ -328,6 +709,10 @@
     }
 
     function calculateRowAmount(row, showWarning) {
+        if (isRowCancelled(row)) {
+            updateTestingCharges();
+            return;
+        }
         var amountInput = row.querySelector(".amount-input");
         var discountInput = row.querySelector(".discount-input");
         var discountPercentInput = row.querySelector(".discount-percent-input");
@@ -352,6 +737,7 @@
 
     function refreshAllRates() {
         Array.prototype.forEach.call(body.querySelectorAll("tr"), applyRateToRow);
+        syncRowActionButtons();
     }
 
     function loadRates() {
@@ -650,18 +1036,128 @@
         addCustomerForm.addEventListener("submit", saveCustomerFromModal);
     }
 
+    $("#load_agreement_edit").on("click", function () {
+        var agreementNo = $.trim($("#edit_agreement_lookup").val());
+        if (!agreementNo) {
+            AppToast.error("Enter agreement number to edit.");
+            $("#edit_agreement_lookup").focus();
+            return;
+        }
+        var button = this;
+        var oldHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading...';
+        $.getJSON("agreement-load.php", { agreement_no: agreementNo })
+            .done(function (response) {
+                if (!response || response.status !== "success" || !response.agreement) {
+                    AppToast.error(response && response.message ? response.message : "Agreement not found.");
+                    return;
+                }
+                populateAgreementForm(response.agreement);
+                AppToast.success("Agreement #" + response.agreement.agreement_no + " loaded for editing.");
+            })
+            .fail(function (xhr) {
+                var message = "Unable to load agreement.";
+                try { message = JSON.parse(xhr.responseText).message || message; } catch (error) {}
+                AppToast.error(message);
+            })
+            .always(function () {
+                button.disabled = false;
+                button.innerHTML = oldHtml;
+            });
+    });
+
+    $("#edit_agreement_lookup").on("keydown", function (event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            $("#load_agreement_edit").trigger("click");
+        }
+    });
+
+    $("#update_agreement_status").on("click", function () {
+        var agreementId = $("#edit_agreement_id").val();
+        var status = $("#agreement_status_select").val();
+        if (!agreementId) {
+            AppToast.error("Load an agreement before updating status.");
+            return;
+        }
+        var button = this;
+        var oldHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending...';
+        $.ajax({
+            url: "agreement-status-update.php",
+            method: "POST",
+            dataType: "json",
+            data: { agreement_id: agreementId, agreement_status: status }
+        }).done(function (response) {
+            if (!response || (response.status !== "success" && response.status !== "partial" && response.status !== "warning")) {
+                AppToast.error(response && response.message ? response.message : "Unable to update agreement status.");
+                return;
+            }
+            if (response.agreement_status) {
+                $("#agreement_status_select").val(response.agreement_status);
+            }
+            if (response.delivery_date) $("#delivery_date").val(response.delivery_date);
+            if (response.delivery_time) $("#delivery_time").val(response.delivery_time);
+            var message = response.message || "Agreement status updated.";
+            if (response.status === "warning") AppToast.info(message);
+            else if (response.status === "partial") AppToast.info(message);
+            else AppToast.success(message);
+        }).fail(function (xhr) {
+            var message = "Unable to update agreement status.";
+            try { message = JSON.parse(xhr.responseText).message || message; } catch (error) {}
+            AppToast.error(message);
+        }).always(function () {
+            button.disabled = false;
+            button.innerHTML = oldHtml;
+            if (!$("#edit_agreement_id").val()) button.disabled = true;
+        });
+    });
+
     document.getElementById("add_agreement_row").addEventListener("click", function () {
         if (!requireSelectedCustomer()) return;
         addRow(true);
     });
 
     body.addEventListener("click", function (event) {
+        var cancelButton = event.target.closest(".cancel-row");
+        var undoButton = event.target.closest(".undo-cancel-row");
+        if (cancelButton || undoButton) {
+            var statusRow = (cancelButton || undoButton).closest("tr");
+            var statusInput = statusRow ? statusRow.querySelector(".row-status-input") : null;
+            if (!statusInput) return;
+            if (cancelButton) {
+                promptAgreementRowCancel().then(function (reason) {
+                    if (!reason) return;
+                    statusInput.value = "cancelled";
+                    var reasonInput = statusRow.querySelector(".row-cancel-reason-input");
+                    if (reasonInput) reasonInput.value = reason;
+                    AppToast.info("Row cancelled. Save agreement to update records.");
+                    syncRowState(statusRow);
+                    updatePcsTotal();
+                    updateTestingCharges();
+                });
+                return;
+            } else {
+                statusInput.value = "active";
+                var undoReasonInput = statusRow.querySelector(".row-cancel-reason-input");
+                if (undoReasonInput) undoReasonInput.value = "";
+                AppToast.info("Row restored. Save agreement to update records.");
+            }
+            syncRowState(statusRow);
+            updatePcsTotal();
+            updateTestingCharges();
+            return;
+        }
         var button = event.target.closest(".remove-row");
         if (!button) return;
+        if (form.dataset.editMode === "1") return;
         if (body.querySelectorAll("tr").length === 1) {
             button.closest("tr").querySelectorAll("input").forEach(function (input) {
                 if (input.classList.contains("ref-input")) return;
                 if (input.type === "checkbox") input.checked = false;
+                else if (input.classList.contains("pcs-input")) input.value = "1";
                 else input.value = "";
             });
             button.closest("tr").querySelectorAll("select").forEach(function (select) {
@@ -675,6 +1171,7 @@
         }
         button.closest("tr").remove();
         renumberRows();
+        syncRowActionButtons();
         updatePcsTotal();
         updateTestingCharges();
     });
@@ -694,6 +1191,12 @@
 
     $("#testing_charges,#payment_cash,#payment_cheque,#payment_neft,#payment_card,#payment_tds").on("input", updateDueAmount);
     $("#mou_cdc").on("change", refreshAllRates);
+    $("#collection_center_id").on("change", function () {
+        form.dataset.locationLetter = selectedCollectionCode();
+        if (form.dataset.editMode !== "1") {
+            renumberRows();
+        }
+    });
 
     body.addEventListener("change", function (event) {
         if (event.target.classList.contains("rate-category")) {
@@ -716,7 +1219,7 @@
             return;
         }
         if (!requireSelectedCustomer()) return;
-        if (!hasItemRow()) {
+        if (!hasItemRow() && form.dataset.editMode !== "1") {
             AppToast.error("Add at least one stone detail row.");
             var firstInput = body.querySelector("input,select");
             if (firstInput) firstInput.focus();
@@ -728,74 +1231,87 @@
             signatureCanvas.focus();
             return;
         }
-        if (signatureMode() === "esign" && signatureCanvas && signatureHasInk) {
-            signatureInput.value = signatureToTrimmedImage();
-        } else {
-            signatureInput.value = "";
-        }
-        var data = new FormData(form);
-        submit.disabled = true;
-        submit.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving...';
-        $.ajax({ url: "agreement-save.php", method: "POST", data: data, processData: false, contentType: false, dataType: "json" })
-            .done(function (response) {
-                if (!response || response.status !== "success") {
-                    AppToast.error(response && response.message ? response.message : "Unable to save agreement.");
-                    return;
-                }
-                $("#saved_agreement_no").text("#" + response.agreement_no);
-                $("#saved_agreement_print").attr("href", response.print_url);
-                $("#agreement_status").css("display", "flex");
-                if (response.agreement_no) {
-                    var nextAgreementNo = parseInt(response.agreement_no, 10) + 1;
-                    form.dataset.agreementNo = String(nextAgreementNo);
-                    $("#agreement_serial_no").val(nextAgreementNo);
-                }
-                if (response.next_certificate_no) {
-                    form.dataset.nextCertiNo = String(parseInt(response.next_certificate_no, 10) || 1);
-                    renumberRows();
-                }
-                AppToast.success("Agreement saved. Serial #" + response.agreement_no + ".");
-                var printUrl = response.print_url || ("agreement-print.php?id=" + response.id);
-                var askMessage = "Agreement saved. Generate agreement now?";
-                if (window.AppConfirm && typeof AppConfirm.show === "function") {
-                    AppConfirm.show(askMessage, {
-                        title: "Generate agreement?",
-                        confirmText: "Generate Agreement",
-                        cancelText: "Exit"
-                    }).then(function (confirmed) {
-                        if (confirmed) {
-                            openAgreementPrint(printUrl);
+        confirmAgreementSave().then(function (confirmed) {
+            if (!confirmed) return;
+            if (signatureMode() === "esign" && signatureCanvas && signatureHasInk) {
+                signatureInput.value = signatureToTrimmedImage();
+            } else {
+                signatureInput.value = "";
+            }
+            var data = new FormData(form);
+            submit.disabled = true;
+            submit.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving...';
+            $.ajax({ url: "agreement-save.php", method: "POST", data: data, processData: false, contentType: false, dataType: "json" })
+                .done(function (response) {
+                    if (!response || response.status !== "success") {
+                        AppToast.error(response && response.message ? response.message : "Unable to save agreement.");
+                        return;
+                    }
+                    $("#saved_agreement_no").text("#" + response.agreement_no);
+                    $("#saved_agreement_print").attr("href", response.print_url);
+                    $("#agreement_status").css("display", "flex");
+                    if (response.agreement_no && !response.edit_mode) {
+                        var nextAgreementNo = parseInt(response.agreement_no, 10) + 1;
+                        freshAgreementNo = String(nextAgreementNo);
+                        form.dataset.agreementNo = String(nextAgreementNo);
+                        $("#agreement_serial_no").val(nextAgreementNo);
+                    }
+                    if (response.next_certificate_no) {
+                        freshNextCertiNo = String(parseInt(response.next_certificate_no, 10) || 1);
+                        form.dataset.nextCertiNo = String(parseInt(response.next_certificate_no, 10) || 1);
+                        renumberRows();
+                    }
+                    AppToast.success((response.edit_mode ? "Agreement updated. Serial #" : "Agreement saved. Serial #") + response.agreement_no + ".");
+                    if (response.row_cancellation_message) {
+                        if (response.row_cancellation_whatsapp && response.row_cancellation_whatsapp.ok) {
+                            AppToast.success(response.row_cancellation_message);
+                        } else {
+                            AppToast.warning(response.row_cancellation_message);
                         }
+                    }
+                    var printUrl = response.print_url || ("agreement-print.php?id=" + response.id);
+                    var labelsUrl = response.labels_url || ("agreement-labels-print.php?id=" + response.id);
+                    if (window.Promise) {
+                        showAgreementSavedActions(printUrl, labelsUrl).then(resetAgreementForm);
+                    } else if (window.confirm("Agreement saved. Generate agreement now?")) {
+                        openAgreementPrint(printUrl);
                         resetAgreementForm();
-                    });
-                } else if (window.confirm(askMessage)) {
-                    openAgreementPrint(printUrl);
-                    resetAgreementForm();
-                } else {
-                    resetAgreementForm();
-                }
-            })
-            .fail(function (xhr) {
-                var message = "Unable to save agreement.";
-                try { message = JSON.parse(xhr.responseText).message || message; } catch (error) {}
-                AppToast.error(message);
-            })
-            .always(function () {
-                submit.disabled = false;
-                submit.innerHTML = '<i class="fa fa-check"></i> Save Agreement';
-            });
+                    } else if (window.confirm("Generate labels now?")) {
+                        openAgreementPrint(labelsUrl);
+                        resetAgreementForm();
+                    } else {
+                        resetAgreementForm();
+                    }
+                })
+                .fail(function (xhr) {
+                    var message = "Unable to save agreement.";
+                    try { message = JSON.parse(xhr.responseText).message || message; } catch (error) {}
+                    AppToast.error(message);
+                })
+                .always(function () {
+                    submit.disabled = false;
+                    submit.innerHTML = form.dataset.editMode === "1" ? '<i class="fa fa-save"></i> Update Agreement' : '<i class="fa fa-check"></i> Save Agreement';
+                });
+        });
     });
 
     form.addEventListener("reset", function () {
+        if (suppressResetHandler) return;
         window.setTimeout(function () {
             body.innerHTML = "";
             buildRateOptions();
             loadColours();
+            form.dataset.editMode = "0";
+            form.dataset.agreementNo = freshAgreementNo || form.dataset.agreementNo || "";
+            form.dataset.nextCertiNo = freshNextCertiNo || form.dataset.nextCertiNo || "1";
+            form.dataset.locationLetter = selectedCollectionCode();
+            setEditMode(null);
             updatePcsTotal();
             $("#agreement_status").hide();
             $("#customer_suggest").removeClass("active").empty();
             if (customerIdInput) customerIdInput.value = "";
             $("#agreement_serial_no").val(form.dataset.agreementNo || "");
+            $("#edit_agreement_lookup").val("");
             $("input[name='signature_mode'][value='manual']").prop("checked", true);
             clearSignaturePad();
             refreshSignatureMode();

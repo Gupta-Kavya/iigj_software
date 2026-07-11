@@ -79,5 +79,5 @@ function super_admin_format_date($value, $withTime = true)
 
 function super_admin_report_type($type)
 {
-    return ['S' => 'Colour Stone', 'D' => 'Diamond', 'J' => 'Jewellery', 'R' => 'Rudraksha'][strtoupper((string) $type)] ?? 'Unknown';
+    return ['S' => 'Colour Stone', 'D' => 'Diamond', 'DS' => 'Diamond Screening', 'J' => 'Jewellery', 'R' => 'Rudraksha'][strtoupper((string) $type)] ?? 'Unknown';
 }
