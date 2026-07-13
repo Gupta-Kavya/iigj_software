@@ -21,11 +21,7 @@ if (!$stmt) {
     http_response_code(500);
     exit('Unable to prepare certificate query: ' . $conn->error);
 }
-if ($hasFormUserId) {
-    $stmt->bind_param('i', $certiNo);
-} else {
-    $stmt->bind_param('i', $certiNo);
-}
+$stmt->bind_param('i', $certiNo);
 $stmt->execute();
 $result = $stmt->get_result();
 $row = $result->fetch_assoc();
@@ -49,6 +45,7 @@ $pageHeight = $orientation === 'portrait' ? '297mm' : '210mm';
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="stylesheet" href="../css/print-preview.css">
 <style>
 @page {
     size: A4 <?php echo $orientation; ?>;
@@ -62,59 +59,23 @@ html, body {
     padding: 0;
 }
 body {
-    background: #e5e7eb;
+    background: #eef1f5;
     color: #111827;
     font-family: Arial, sans-serif;
 }
-.print-toolbar {
-    align-items: center;
-    background: #ffffff;
-    border-bottom: 1px solid #d0d5dd;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
-    display: flex;
-    gap: 12px;
-    justify-content: space-between;
-    padding: 12px 18px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-.print-toolbar h1 {
-    font-size: 16px;
-    margin: 0;
-}
-.print-toolbar p {
-    color: #667085;
-    font-size: 12px;
-    margin: 3px 0 0;
-}
-.print-toolbar button {
-    background: #171717;
-    border: 0;
-    border-radius: 8px;
-    color: #fff;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 10px 16px;
-}
-.print-stage {
-    padding: 20px;
-}
 .a4-sheet {
     background: #ffffff;
-    box-shadow: 0 16px 42px rgba(15, 23, 42, .22);
-    width: <?php echo $pageWidth; ?>;
     height: <?php echo $pageHeight; ?>;
     margin: 0 auto;
     overflow: hidden;
+    width: <?php echo $pageWidth; ?>;
 }
 .a4-page-img {
     display: block;
-    width: <?php echo $pageWidth; ?>;
     height: <?php echo $pageHeight; ?>;
     margin: 0;
     padding: 0;
+    width: <?php echo $pageWidth; ?>;
 }
 .a4-empty {
     font-family: Arial, sans-serif;
@@ -124,16 +85,9 @@ body {
     html,
     body {
         background: #ffffff;
-        width: <?php echo $pageWidth; ?>;
         height: <?php echo $pageHeight; ?>;
         overflow: hidden;
-    }
-    .print-toolbar {
-        display: none !important;
-    }
-    .print-stage {
-        margin: 0;
-        padding: 0;
+        width: <?php echo $pageWidth; ?>;
     }
     .a4-sheet {
         box-shadow: none;
@@ -145,22 +99,51 @@ body {
 }
 </style>
 </head>
-<body>
-<div class="print-toolbar">
-    <div>
-        <h1>A4 Certificate Print Preview</h1>
-        <p>Certificate No: <?php echo htmlspecialchars((string) $certiNo, ENT_QUOTES, 'UTF-8'); ?> · Print in <?php echo htmlspecialchars($orientation, ENT_QUOTES, 'UTF-8'); ?> at actual size / 100%.</p>
-    </div>
-    <button type="button" onclick="window.print()">Print A4 Certificate</button>
+<body data-preview-default="fit" data-preview-max-zoom="0.81">
+<div class="print-preview-app">
+    <header class="print-preview-toolbar">
+        <div class="print-preview-brand">
+            <span class="print-preview-logo"><img src="assets/agreement-iigj.png" alt="IIGJ"></span>
+            <div>
+                <div class="print-preview-title">A4 Report Preview</div>
+                <div class="print-preview-subtitle">Certificate <?php echo htmlspecialchars((string) $certiNo, ENT_QUOTES, 'UTF-8'); ?> - <?php echo htmlspecialchars($orientation, ENT_QUOTES, 'UTF-8'); ?></div>
+            </div>
+        </div>
+        <div class="print-preview-tools" aria-label="Preview controls">
+            <button type="button" class="print-preview-tool" data-preview-zoom="out" title="Zoom out">-</button>
+            <span class="print-preview-zoom-value" id="print_preview_zoom_value">81%</span>
+            <button type="button" class="print-preview-tool" data-preview-zoom="in" title="Zoom in">+</button>
+            <button type="button" class="print-preview-tool" data-preview-zoom="fit" title="Fit width">Fit</button>
+        </div>
+        <div class="print-preview-actions">
+            <button type="button" onclick="window.close()">Close</button>
+            <button type="button" class="primary-action" onclick="window.print()">Print A4 Report</button>
+        </div>
+    </header>
+    <main class="print-preview-stage">
+        <aside class="print-preview-side">
+            <h2>Report Details</h2>
+            <table class="print-preview-info">
+                <tr><td>Certificate</td><td><?php echo htmlspecialchars((string) $certiNo, ENT_QUOTES, 'UTF-8'); ?></td></tr>
+                <tr><td>Format</td><td>A4 <?php echo htmlspecialchars($orientation, ENT_QUOTES, 'UTF-8'); ?></td></tr>
+                <tr><td>Type</td><td><?php echo htmlspecialchars((string) $reportType, ENT_QUOTES, 'UTF-8'); ?></td></tr>
+                <tr><td>Paper</td><td><?php echo htmlspecialchars($pageWidth . ' x ' . $pageHeight, ENT_QUOTES, 'UTF-8'); ?></td></tr>
+            </table>
+            <div class="print-preview-note">Print at actual size / 100% so report placement matches the builder exactly.</div>
+        </aside>
+        <section class="print-preview-document" aria-label="A4 report preview">
+            <div class="print-preview-page-wrap" id="print_preview_page_wrap">
+                <div class="a4-sheet preview-paper">
+                    <?php if ($renderedPage): ?>
+                        <img class="a4-page-img" src="<?php echo htmlspecialchars($renderedPage, ENT_QUOTES, 'UTF-8'); ?>" alt="A4 report">
+                    <?php else: ?>
+                        <div class="a4-empty"><?php echo htmlspecialchars($renderError, ENT_QUOTES, 'UTF-8'); ?></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </section>
+    </main>
 </div>
-<div class="print-stage">
-<div class="a4-sheet">
-<?php if ($renderedPage): ?>
-<img class="a4-page-img" src="<?php echo htmlspecialchars($renderedPage, ENT_QUOTES, 'UTF-8'); ?>" alt="A4 report">
-<?php else: ?>
-<div class="a4-empty"><?php echo htmlspecialchars($renderError, ENT_QUOTES, 'UTF-8'); ?></div>
-<?php endif; ?>
-</div>
-</div>
+<script src="../js/print-preview.js"></script>
 </body>
 </html>

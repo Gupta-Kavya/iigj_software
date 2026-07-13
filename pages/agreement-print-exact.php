@@ -87,7 +87,7 @@ function agreement_exact_load($conn, $id, $userId = 0, $allowAnyUser = false)
         return null;
     }
 
-    $sql = "SELECT a.*, u.full_name, u.company_name, u.email AS user_email, u.phone AS user_phone, u.gst_number AS user_gst
+    $sql = "SELECT a.*, u.full_name, u.branch_location, u.email AS user_email, u.phone AS user_phone
         FROM sm_stone_agreements a
         LEFT JOIN sm_users u ON u.id = a.user_id
         WHERE a.id = ?";
@@ -125,6 +125,20 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
     $deliveryText = trim(agreement_exact_date($agreement['delivery_date']) . ($agreement['delivery_time'] ? ' - ' . $agreement['delivery_time'] : ''));
     $totalCharges = (float) ($agreement['testing_charges'] ?? 0);
     $amountWords = 'Rs. ' . agreement_exact_amount_words($totalCharges);
+    $branchDetails = user_branch_location_details($GLOBALS['conn'], $agreement['branch_location'] ?? '');
+    $branchAddress = trim((string) ($branchDetails['address'] ?? ''));
+    $branchPhone = trim((string) ($branchDetails['phone'] ?? ''));
+    $branchEmail = trim((string) ($branchDetails['email'] ?? ''));
+    $branchWebsite = trim((string) ($branchDetails['website'] ?? ''));
+    $branchCin = trim((string) ($branchDetails['cin_no'] ?? ''));
+    $branchGst = trim((string) ($branchDetails['gst_no'] ?? ''));
+    $branchContactParts = [];
+    if ($branchPhone !== '') $branchContactParts[] = $branchPhone;
+    if ($branchEmail !== '') $branchContactParts[] = 'Email: ' . $branchEmail;
+    if ($branchWebsite !== '') $branchContactParts[] = 'Web:- ' . $branchWebsite;
+    $branchLegalParts = [];
+    if ($branchCin !== '') $branchLegalParts[] = 'CIN : ' . $branchCin;
+    if ($branchGst !== '') $branchLegalParts[] = 'GST NO: ' . $branchGst;
     $signatureImage = '';
     if (($agreement['signature_mode'] ?? '') === 'esign' && preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=\r\n]+$/', (string) ($agreement['customer_signature'] ?? ''))) {
         $signatureImage = (string) $agreement['customer_signature'];
@@ -599,33 +613,194 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                 }
 
                 body {
-                    background: #eee;
+                    background: #eef1f5;
                     color: #000;
                     font-family: Arial, Helvetica, sans-serif;
                     font-size: 13px;
                     line-height: 1.22;
                     margin: 0;
-                    padding: 14px
+                    padding: 0
                 }
 
                 .actions {
-                    margin: 0 auto 10px;
-                    max-width: 794px;
-                    text-align: right
+                    align-items: center;
+                    display: flex;
+                    gap: 8px;
+                    justify-content: flex-end
                 }
 
                 .actions a,
                 .actions button {
-                    background: #111;
-                    border: 1px solid #111;
-                    border-radius: 3px;
-                    color: #fff;
+                    align-items: center;
+                    background: #fff;
+                    border: 1px solid #d8dee8;
+                    border-radius: 8px;
+                    color: #172033;
+                    cursor: pointer;
+                    display: inline-flex;
+                    font-size: 12px;
+                    font-weight: 600;
+                    gap: 6px;
+                    min-height: 34px;
+                    padding: 7px 12px;
+                    text-decoration: none
+                }
+
+                .actions .primary-action {
+                    background: #172033;
+                    border-color: #172033;
+                    color: #fff
+                }
+
+                .preview-app {
+                    background: #eef1f5;
+                    min-height: 100vh
+                }
+
+                .preview-toolbar {
+                    align-items: center;
+                    background: #fff;
+                    border-bottom: 1px solid #dfe4ec;
+                    box-shadow: 0 10px 26px rgba(21, 31, 48, .08);
+                    display: flex;
+                    gap: 14px;
+                    justify-content: space-between;
+                    left: 0;
+                    min-height: 64px;
+                    padding: 10px 18px;
+                    position: sticky;
+                    right: 0;
+                    top: 0;
+                    z-index: 20
+                }
+
+                .preview-brand {
+                    align-items: center;
+                    display: flex;
+                    gap: 10px;
+                    min-width: 240px
+                }
+
+                .preview-mark {
+                    align-items: center;
+                    background: #172033;
+                    border-radius: 8px;
+                    color: #e0bd6f;
+                    display: inline-flex;
+                    font-size: 13px;
+                    font-weight: 800;
+                    height: 36px;
+                    justify-content: center;
+                    width: 36px
+                }
+
+                .preview-title {
+                    color: #172033;
+                    font-size: 14px;
+                    font-weight: 700;
+                    line-height: 1.2
+                }
+
+                .preview-subtitle {
+                    color: #667085;
+                    font-size: 11px;
+                    margin-top: 2px
+                }
+
+                .preview-tools {
+                    align-items: center;
+                    display: flex;
+                    gap: 8px
+                }
+
+                .preview-tool {
+                    background: #f7f8fb;
+                    border: 1px solid #d8dee8;
+                    border-radius: 8px;
+                    color: #172033;
                     cursor: pointer;
                     font-size: 12px;
                     font-weight: 700;
-                    margin-left: 6px;
-                    padding: 7px 11px;
-                    text-decoration: none
+                    min-height: 34px;
+                    min-width: 36px;
+                    padding: 6px 10px
+                }
+
+                .preview-zoom-value {
+                    color: #475467;
+                    font-size: 12px;
+                    font-weight: 700;
+                    min-width: 48px;
+                    text-align: center
+                }
+
+                .preview-stage {
+                    display: grid;
+                    gap: 18px;
+                    grid-template-columns: 250px minmax(0, 1fr);
+                    padding: 18px
+                }
+
+                .preview-side {
+                    align-self: start;
+                    background: #fff;
+                    border: 1px solid #dfe4ec;
+                    border-radius: 10px;
+                    box-shadow: 0 16px 34px rgba(21, 31, 48, .08);
+                    padding: 14px;
+                    position: sticky;
+                    top: 82px
+                }
+
+                .preview-side h2 {
+                    color: #172033;
+                    font-size: 14px;
+                    margin: 0 0 10px
+                }
+
+                .preview-info {
+                    border-collapse: collapse;
+                    width: 100%
+                }
+
+                .preview-info td {
+                    border-bottom: 1px solid #edf0f5;
+                    color: #172033;
+                    font-size: 12px;
+                    padding: 8px 0;
+                    vertical-align: top
+                }
+
+                .preview-info td:first-child {
+                    color: #667085;
+                    width: 84px
+                }
+
+                .preview-note {
+                    background: #fff8ea;
+                    border: 1px solid #f0d99a;
+                    border-radius: 8px;
+                    color: #6f520f;
+                    font-size: 11px;
+                    line-height: 1.35;
+                    margin-top: 12px;
+                    padding: 9px 10px
+                }
+
+                .preview-document {
+                    align-items: flex-start;
+                    background: #d9dee7;
+                    border: 1px solid #cfd6e1;
+                    border-radius: 10px;
+                    display: flex;
+                    justify-content: center;
+                    min-height: calc(100vh - 100px);
+                    overflow: auto;
+                    padding: 24px
+                }
+
+                .preview-page-wrap {
+                    transform-origin: top center
                 }
 
                 .sheet {
@@ -635,6 +810,10 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     margin: 0 auto;
                     max-width: 794px;
                     <?php echo $forPdf ? 'padding:0;position:static;' : 'min-height:1123px;padding:6px 12px 10px;position:relative;'; ?>
+                }
+
+                .preview-document .sheet {
+                    box-shadow: 0 18px 44px rgba(21, 31, 48, .28)
                 }
 
                 .copy {
@@ -1189,14 +1368,67 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     }
 
                 <?php else: ?>
+                    @media (max-width: 980px) {
+                        .preview-toolbar {
+                            align-items: flex-start;
+                            flex-direction: column
+                        }
+
+                        .preview-stage {
+                            grid-template-columns: 1fr;
+                            padding: 12px
+                        }
+
+                        .preview-side {
+                            position: static
+                        }
+
+                        .preview-document {
+                            padding: 12px
+                        }
+
+                        .actions,
+                        .preview-tools {
+                            flex-wrap: wrap;
+                            justify-content: flex-start
+                        }
+                    }
+
                     @media print {
+                        html,
                         body {
                             background: #fff;
+                            margin: 0;
+                            overflow-x: hidden;
                             padding: 0
                         }
 
                         .actions {
                             display: none
+                        }
+
+                        .preview-toolbar,
+                        .preview-side {
+                            display: none !important
+                        }
+
+                        .preview-app,
+                        .preview-stage,
+                        .preview-document,
+                        .preview-page-wrap {
+                            background: #fff !important;
+                            border: 0 !important;
+                            box-shadow: none !important;
+                            display: block !important;
+                            margin: 0 !important;
+                            min-height: 0 !important;
+                            overflow-x: hidden !important;
+                            overflow-y: visible !important;
+                            padding: 0 !important;
+                            position: static !important;
+                            transform: none !important;
+                            width: auto !important;
+                            zoom: 1 !important
                         }
 
                         .sheet {
@@ -1205,7 +1437,8 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                             max-width: none;
                             min-height: 280mm;
                             padding: 0;
-                            box-shadow: none
+                            box-shadow: none;
+                            width: 100%
                         }
 
                         .bottom {
@@ -1735,11 +1968,61 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
 
     <body class="<?php echo agreement_h($bodyClass); ?>">
         <?php if (!$forPdf && !$hideActions): ?>
-            <div class="actions">
-                <a href="agreement.php">New agreement</a>
-                <button type="button" id="send_whatsapp" data-id="<?php echo (int) $agreement['id']; ?>">Send WhatsApp</button>
-                <button type="button" onclick="window.print()">Print</button>
-            </div>
+            <div class="preview-app">
+                <header class="preview-toolbar">
+                    <div class="preview-brand">
+                        <span class="preview-mark">SS</span>
+                        <div>
+                            <div class="preview-title">Agreement Preview</div>
+                            <div class="preview-subtitle"><?php echo agreement_h(agreement_exact_no($agreement)); ?> · Customer copy</div>
+                        </div>
+                    </div>
+                    <div class="preview-tools" aria-label="Preview controls">
+                        <button type="button" class="preview-tool" data-preview-zoom="out" title="Zoom out">-</button>
+                        <span class="preview-zoom-value" id="preview_zoom_value">100%</span>
+                        <button type="button" class="preview-tool" data-preview-zoom="in" title="Zoom in">+</button>
+                        <button type="button" class="preview-tool" data-preview-zoom="fit" title="Fit width">Fit</button>
+                    </div>
+                    <div class="actions">
+                        <a href="agreement.php">Agreement Form</a>
+                        <a href="agreement-labels-print.php?id=<?php echo (int) $agreement['id']; ?>">Labels</a>
+                        <button type="button" id="send_whatsapp" data-id="<?php echo (int) $agreement['id']; ?>">Send WhatsApp</button>
+                        <button type="button" class="primary-action" onclick="window.print()">Print</button>
+                    </div>
+                </header>
+                <main class="preview-stage">
+                    <aside class="preview-side">
+                        <h2>Document Details</h2>
+                        <table class="preview-info">
+                            <tr>
+                                <td>Agreement</td>
+                                <td><?php echo agreement_h(agreement_exact_no($agreement)); ?></td>
+                            </tr>
+                            <tr>
+                                <td>Date</td>
+                                <td><?php echo agreement_h(trim($dateText . ' ' . $timeText)); ?></td>
+                            </tr>
+                            <tr>
+                                <td>Customer</td>
+                                <td><?php echo agreement_h($agreement['customer_name'] ?? ''); ?></td>
+                            </tr>
+                            <tr>
+                                <td>Branch</td>
+                                <td><?php echo agreement_h($agreement['branch_location'] ?? ''); ?></td>
+                            </tr>
+                            <tr>
+                                <td>Stones</td>
+                                <td><?php echo (int) ($agreement['pcs_total'] ?? 0); ?></td>
+                            </tr>
+                            <tr>
+                                <td>Charges</td>
+                                <td>Rs. <?php echo agreement_h(agreement_money($totalCharges)); ?></td>
+                            </tr>
+                        </table>
+                        <div class="preview-note">This is only the preview area. Printing keeps the exact A4 agreement format.</div>
+                    </aside>
+                    <section class="preview-document" aria-label="Agreement document preview">
+                        <div class="preview-page-wrap" id="preview_page_wrap">
         <?php endif; ?>
         <div class="sheet">
             <div class="agreement-copy">CUSTOMER COPY</div>
@@ -1757,10 +2040,8 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     </td>
                 </tr>
             </table>
-            <div class="addr">SP-111, R.K. Derewala Tower, KGK Campus, Near SEZ Phase 1,Sitapura Industrial Area,
-                Jaipur-302022<br>
-                +91-141-2770995, 2941470, | Email: Info@iigjrlc.org&nbsp; | Web:- iigjrlc.org</div>
-            <div class="cin">CIN : U73100MH2019NPL328412&nbsp; | &nbsp;GST NO: 08AHPPG9551N1JZ</div>
+            <div class="addr"><?php echo agreement_h($branchAddress); ?><?php if ($branchContactParts): ?><br><?php echo agreement_h(implode(' | ', $branchContactParts)); ?><?php endif; ?></div>
+            <?php if ($branchLegalParts): ?><div class="cin"><?php echo agreement_h(implode(' | ', $branchLegalParts)); ?></div><?php endif; ?>
             <table class="meta">
                 <colgroup>
                     <col style="width:15%">
@@ -1994,8 +2275,37 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
             </div>
         </div>
         <?php if (!$forPdf && !$hideActions): ?>
+                        </div>
+                    </section>
+                </main>
+            </div>
+        <?php endif; ?>
+        <?php if (!$forPdf && !$hideActions): ?>
             <script>
                 (function () {
+                    var pageWrap = document.getElementById("preview_page_wrap");
+                    var zoomValue = document.getElementById("preview_zoom_value");
+                    var zoom = 1;
+                    function setZoom(next) {
+                        zoom = Math.max(.55, Math.min(1.45, next));
+                        if (pageWrap) pageWrap.style.zoom = zoom;
+                        if (zoomValue) zoomValue.textContent = Math.round(zoom * 100) + "%";
+                    }
+                    document.addEventListener("click", function (event) {
+                        var control = event.target.closest("[data-preview-zoom]");
+                        if (!control) return;
+                        var action = control.getAttribute("data-preview-zoom");
+                        if (action === "in") setZoom(zoom + .1);
+                        if (action === "out") setZoom(zoom - .1);
+                        if (action === "fit") {
+                            var documentBox = document.querySelector(".preview-document");
+                            var sheet = document.querySelector(".sheet");
+                            if (documentBox && sheet) {
+                                var available = Math.max(360, documentBox.clientWidth - 48);
+                                setZoom(Math.min(1.25, available / 794));
+                            }
+                        }
+                    });
                     var button = document.getElementById("send_whatsapp");
                     if (!button) return;
                     button.addEventListener("click", function () {

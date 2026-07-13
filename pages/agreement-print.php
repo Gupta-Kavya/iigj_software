@@ -6,6 +6,7 @@ require_once 'auth.php';
 auth_require_login();
 require_once 'db_connect.php';
 require_once 'agreement_helper.php';
+require_once 'user_branch_helper.php';
 
 $id = max(0, (int) ($_GET['id'] ?? 0));
 $userId = auth_current_user_id();
@@ -14,7 +15,7 @@ if ($id <= 0 || !agreement_table_ready($conn)) {
     die('Agreement not found.');
 }
 
-$sql = "SELECT a.*, u.full_name, u.company_name, u.email AS user_email, u.phone AS user_phone, u.gst_number AS user_gst
+$sql = "SELECT a.*, u.full_name, u.branch_location, u.email AS user_email, u.phone AS user_phone
     FROM sm_stone_agreements a
     LEFT JOIN sm_users u ON u.id = a.user_id
     WHERE a.id = ?";
@@ -44,7 +45,8 @@ $items = agreement_get_items($conn, (int) $agreement['id'], $agreement);
 
 function agreement_print_html($agreement, $items, $forPdf = false)
 {
-    $labName = $agreement['company_name'] ?: 'IIGJ Gem Testing Laboratory';
+    $branchDetails = user_branch_location_details($GLOBALS['conn'], $agreement['branch_location'] ?? '');
+    $labName = trim((string) ($branchDetails['name'] ?? '')) ?: 'IIGJ RLC';
     ob_start();
     ?>
     <!DOCTYPE html>

@@ -55,97 +55,96 @@ $total = max(1, count($items));
 <head>
     <meta charset="utf-8">
     <title>Agreement Labels <?php echo label_text($agreementNo); ?></title>
+    <link rel="stylesheet" href="../css/print-preview.css">
     <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; }
-        body { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
-        .actions { display: flex; gap: 8px; padding: 10px; }
-        .actions button { background: #111827; border: 0; border-radius: 6px; color: #fff; cursor: pointer; font: 600 13px Arial, sans-serif; padding: 8px 12px; }
+        body { background: #eef1f5; color: #000; font-family: Arial, Helvetica, sans-serif; }
         .label-sheet { margin: 0; }
         .stone-label {
             break-after: page;
-            height: 50mm;
+            height: 38mm;
             overflow: hidden;
-            padding: 2.7mm 3.2mm;
-            width: 100mm;
+            padding: 1.3mm 1.7mm;
+            width: 75mm;
         }
         .label-card {
             border: 0.35mm solid #111;
             border-radius: 1.4mm;
             height: 100%;
-            padding: 1.8mm 2.2mm;
+            padding: 1.2mm 1.5mm;
         }
         .label-top {
             align-items: start;
             border-bottom: 0.22mm solid #111;
             display: grid;
-            gap: 1.6mm;
-            grid-template-columns: minmax(0, 1fr) 28mm;
-            padding-bottom: 1.1mm;
+            gap: 1mm;
+            grid-template-columns: minmax(0, 1fr) 22mm;
+            padding-bottom: 0.7mm;
         }
         .ref-line {
             display: grid;
-            gap: 1.2mm;
-            grid-template-columns: 13mm 2mm minmax(0, 1fr);
+            gap: 0.7mm;
+            grid-template-columns: 10mm 1.5mm minmax(0, 1fr);
             min-width: 0;
         }
-        .ref-line .label-key { font-size: 9.4pt; }
-        .ref-line .label-value { font-size: 9.4pt; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ref-line .label-key { font-size: 8.2pt; }
+        .ref-line .label-value { font-size: 8.2pt; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .side-meta {
             display: grid;
-            gap: 0.8mm;
-            grid-template-columns: 11mm minmax(0, 1fr);
+            gap: 0.45mm;
+            grid-template-columns: 8mm minmax(0, 1fr);
         }
         .side-meta .label-key,
-        .side-meta .label-value { font-size: 8.1pt; }
+        .side-meta .label-value { font-size: 6.8pt; }
         .label-main {
             display: grid;
-            gap: 0.8mm 2mm;
-            grid-template-columns: 45mm minmax(0, 1fr);
-            padding-top: 1mm;
+            gap: 0.5mm 1.2mm;
+            grid-template-columns: 35mm minmax(0, 1fr);
+            padding-top: 0.7mm;
         }
         .metric {
             display: grid;
-            gap: 0.7mm;
-            grid-template-columns: 27mm minmax(0, 1fr);
+            gap: 0.45mm;
+            grid-template-columns: 21mm minmax(0, 1fr);
             min-width: 0;
         }
         .metric .label-key {
-            font-size: 8.2pt;
+            font-size: 7.1pt;
             min-width: 0;
             overflow: hidden;
             text-overflow: clip;
             white-space: nowrap;
         }
-        .metric .pcs-key { font-size: 7.2pt; }
-        .metric .label-value { font-size: 8.8pt; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .metric .pcs-key { font-size: 6.4pt; }
+        .metric .label-value { font-size: 7.3pt; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-pill {
             align-self: start;
             border: 0.22mm solid #111;
             border-radius: 1mm;
-            font-size: 7.6pt;
+            font-size: 6.5pt;
             font-weight: 700;
             justify-self: end;
             max-width: 100%;
             overflow: hidden;
-            padding: 0.7mm 1.5mm;
+            padding: 0.45mm 1mm;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
         .detail-block {
             border-bottom: 0.18mm solid #999;
             border-top: 0.18mm solid #999;
-            margin-top: 1.2mm;
-            padding: 1mm 0;
+            margin-top: 0.7mm;
+            padding: 0.55mm 0;
         }
         .detail-row {
             display: grid;
-            gap: 1.2mm;
-            grid-template-columns: 18mm minmax(0, 1fr);
+            gap: 0.8mm;
+            grid-template-columns: 15mm minmax(0, 1fr);
             min-width: 0;
         }
-        .detail-row + .detail-row { margin-top: 0.7mm; }
-        .detail-row .label-key { font-size: 7.8pt; }
+        .detail-row + .detail-row { margin-top: 0.4mm; }
+        .detail-row .label-key { font-size: 6.8pt; }
         .label-key {
             font-weight: 800;
             line-height: 1.1;
@@ -159,47 +158,77 @@ $total = max(1, count($items));
         }
         .colour-value {
             font-size: 8.4pt;
-            max-height: 4.4mm;
+            max-height: 3.6mm;
             overflow: hidden;
         }
         .category-value {
-            font-size: 7.6pt;
+            font-size: 6.6pt;
             line-height: 1.06;
-            max-height: 8.5mm;
+            max-height: 6.8mm;
             overflow: hidden;
         }
         .date-grid {
             display: grid;
-            gap: 0.6mm 1.4mm;
+            gap: 0.35mm 0.8mm;
             grid-template-columns: 1fr 1fr;
-            padding-top: 1mm;
+            padding-top: 0.55mm;
         }
         .date-item {
             display: grid;
-            gap: 0.5mm;
-            grid-template-columns: 13mm minmax(0, 1fr);
+            gap: 0.35mm;
+            grid-template-columns: 13.8mm minmax(0, 1fr);
             min-width: 0;
         }
         .date-item .label-key,
         .date-item .label-value {
-            font-size: 7.4pt;
+            font-size: 6.25pt;
             overflow: hidden;
-            text-overflow: ellipsis;
+            text-overflow: clip;
             white-space: nowrap;
         }
-        @page { margin: 0; size: 100mm 50mm; }
+        @page { margin: 0; size: 75mm 38mm; }
         @media print {
-            .actions { display: none; }
             .stone-label { margin: 0; }
         }
     </style>
 </head>
 <body>
-    <div class="actions">
-        <button type="button" onclick="window.print()">Print Labels</button>
-        <button type="button" onclick="window.close()">Close</button>
-    </div>
-    <div class="label-sheet">
+    <div class="print-preview-app">
+        <header class="print-preview-toolbar">
+            <div class="print-preview-brand">
+                <span class="print-preview-logo"><img src="assets/agreement-iigj.png" alt="IIGJ"></span>
+                <div>
+                    <div class="print-preview-title">Agreement Labels Preview</div>
+                    <div class="print-preview-subtitle">Agreement <?php echo label_text($agreementNo); ?> - <?php echo (int) $total; ?> label<?php echo $total === 1 ? '' : 's'; ?></div>
+                </div>
+            </div>
+            <div class="print-preview-tools" aria-label="Preview controls">
+                <button type="button" class="print-preview-tool" data-preview-zoom="out" title="Zoom out">-</button>
+                <span class="print-preview-zoom-value" id="print_preview_zoom_value">100%</span>
+                <button type="button" class="print-preview-tool" data-preview-zoom="in" title="Zoom in">+</button>
+                <button type="button" class="print-preview-tool" data-preview-zoom="fit" title="Fit width">Fit</button>
+            </div>
+            <div class="print-preview-actions">
+                <a href="agreement-print.php?id=<?php echo (int) $id; ?>">Agreement</a>
+                <button type="button" onclick="window.close()">Close</button>
+                <button type="button" class="primary-action" onclick="window.print()">Print Labels</button>
+            </div>
+        </header>
+        <main class="print-preview-stage">
+            <aside class="print-preview-side">
+                <h2>Label Details</h2>
+                <table class="print-preview-info">
+                    <tr><td>Agreement</td><td><?php echo label_text($agreementNo); ?></td></tr>
+                    <tr><td>Date</td><td><?php echo label_text(trim($agreementDate . ' ' . $agreementTime)); ?></td></tr>
+                    <tr><td>Labels</td><td><?php echo (int) $total; ?></td></tr>
+                    <tr><td>Size</td><td>75 mm x 38 mm</td></tr>
+                    <tr><td>Delivery</td><td><?php echo label_text(trim($deliveryDate . ' ' . $deliveryTime)); ?></td></tr>
+                </table>
+                <div class="print-preview-note">Printing uses the fixed label size. Select the label printer and print at actual size.</div>
+            </aside>
+            <section class="print-preview-document" aria-label="Agreement labels preview">
+                <div class="print-preview-page-wrap" id="print_preview_page_wrap">
+                    <div class="label-sheet preview-paper">
         <?php foreach ($items as $index => $item): ?>
             <?php
             $refNo = trim((string) ($item['ref_no'] ?? ''));
@@ -264,11 +293,11 @@ $total = max(1, count($items));
                 </div>
             </section>
         <?php endforeach; ?>
+                    </div>
+                </div>
+            </section>
+        </main>
     </div>
-    <script>
-        window.addEventListener("load", function () {
-            window.setTimeout(function () { window.print(); }, 250);
-        });
-    </script>
+    <script src="../js/print-preview.js"></script>
 </body>
 </html>

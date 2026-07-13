@@ -27,13 +27,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
     if ($action === 'update_profile') {
         $fullName = trim((string) ($_POST['full_name'] ?? ''));
-        $companyName = trim((string) ($_POST['company_name'] ?? ''));
         $branchLocation = auth_is_super_admin()
             ? user_branch_location_clean($_POST['branch_location'] ?? '', $conn)
             : user_branch_location_for_user($conn, $userId);
         $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         $phone = trim((string) ($_POST['phone'] ?? ''));
-        $gstNumber = app_normalize_gst($_POST['gst_number'] ?? '');
 
         if ($fullName === '' || strlen($fullName) > 120) {
             profile_redirect('Please enter a valid full name.', 'error');
@@ -41,11 +39,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 150) {
             profile_redirect('Please enter a valid email address.', 'error');
         }
-        if (strlen($companyName) > 150 || strlen($phone) > 30) {
-            profile_redirect('Company name or phone number is too long.', 'error');
-        }
-        if (!app_valid_gst($gstNumber)) {
-            profile_redirect('Please enter a valid GSTIN or leave it blank.', 'error');
+        if (strlen($phone) > 30) {
+            profile_redirect('Phone number is too long.', 'error');
         }
 
         $check = $conn->prepare('SELECT id FROM sm_users WHERE email = ? AND id <> ? LIMIT 1');
@@ -57,11 +52,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             profile_redirect('That email address is already used by another account.', 'error');
         }
 
-        $stmt = $conn->prepare('UPDATE sm_users SET full_name = ?, company_name = ?, branch_location = ?, email = ?, phone = ?, gst_number = ?, updated_at = NOW() WHERE id = ?');
+        $stmt = $conn->prepare('UPDATE sm_users SET full_name = ?, branch_location = ?, email = ?, phone = ?, updated_at = NOW() WHERE id = ?');
         if (!$stmt) {
             profile_redirect('Unable to prepare the profile update.', 'error');
         }
-        $stmt->bind_param('ssssssi', $fullName, $companyName, $branchLocation, $email, $phone, $gstNumber, $userId);
+        $stmt->bind_param('ssssi', $fullName, $branchLocation, $email, $phone, $userId);
         $saved = $stmt->execute();
         $stmt->close();
         if (!$saved) {
@@ -109,24 +104,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         profile_redirect('Password changed successfully.');
     }
 
-    if ($action === 'update_numbering') {
-        $startNumber = max(1, (int) ($_POST['start_number'] ?? 1));
-        $reportPrefix = atm_normalize_report_prefix($_POST['report_prefix'] ?? 'R');
-        [$ok, $message] = atm_save_numbering_settings($conn, $userId, $startNumber, $reportPrefix);
-        if (!$ok) {
-            profile_redirect($message !== '' ? $message : 'Unable to save certificate numbering settings.', 'error');
-        }
-        $currentSettings = atm_numbering_settings($conn, $userId);
-        $successMessage = !empty($currentSettings['locked'])
-            ? 'Report prefix saved. Starting certificate number is now locked because certificates already exist.'
-            : 'Certificate numbering settings saved successfully.';
-        profile_redirect($successMessage);
-    }
-
     profile_redirect('Unknown profile action.', 'error');
 }
 
-$stmt = $conn->prepare('SELECT id, full_name, company_name, branch_location, email, phone, gst_number, status, last_login_at, created_at, updated_at FROM sm_users WHERE id = ? LIMIT 1');
+$stmt = $conn->prepare('SELECT id, full_name, branch_location, email, phone, status, last_login_at, created_at, updated_at FROM sm_users WHERE id = ? LIMIT 1');
 $stmt->bind_param('i', $userId);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
@@ -152,9 +133,6 @@ if (is_dir($imageDir)) {
     }
 }
 
-$numberingSettings = atm_numbering_settings($conn, $userId);
-$nextNumbering = atm_next_certificate_number($conn, $userId);
-
 $flash = $_SESSION['profile_flash'] ?? null;
 unset($_SESSION['profile_flash']);
 include 'assets/navbar.php';
@@ -165,7 +143,7 @@ include 'assets/navbar.php';
 <div id="page-wrapper"><div class="container-fluid profile-page">
     <div class="profile-hero">
         <div class="profile-avatar"><?php echo htmlspecialchars(strtoupper(substr($user['full_name'], 0, 1))); ?></div>
-        <div><h1><?php echo htmlspecialchars((string) $user['full_name']); ?></h1><p><?php echo htmlspecialchars((string) ($user['company_name'] ?: 'Laboratory account')); ?> · <?php echo htmlspecialchars((string) $user['email']); ?></p></div>
+        <div><h1><?php echo htmlspecialchars((string) $user['full_name']); ?></h1><p><?php echo htmlspecialchars((string) ($user['branch_location'] ?: 'Branch account')); ?> · <?php echo htmlspecialchars((string) $user['email']); ?></p></div>
         <span class="profile-status"><?php echo htmlspecialchars($user['status']); ?></span>
     </div>
     <div class="profile-stats">
@@ -175,18 +153,16 @@ include 'assets/navbar.php';
     </div>
     <div class="profile-grid">
         <section class="profile-card">
-            <div class="profile-card-head"><h3>Profile details</h3><p>These details identify your account and laboratory.</p></div>
+            <div class="profile-card-head"><h3>Profile details</h3><p>These details identify your account and branch.</p></div>
             <div class="profile-card-body">
                 <form method="post">
                     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken); ?>">
                     <input type="hidden" name="action" value="update_profile">
                     <div class="profile-form-grid">
                         <div class="profile-field"><label for="full_name">Full name *</label><input class="form-control" id="full_name" name="full_name" maxlength="120" value="<?php echo htmlspecialchars($user['full_name']); ?>" required></div>
-                        <div class="profile-field"><label for="company_name">Laboratory / Company</label><input class="form-control" id="company_name" name="company_name" maxlength="150" value="<?php echo htmlspecialchars((string) $user['company_name']); ?>"></div>
                         <div class="profile-field"><label for="branch_location">Branch Location</label><select class="form-control" id="branch_location" name="branch_location" <?php echo auth_is_super_admin() ? '' : 'disabled'; ?>><?php echo user_branch_location_options($user['branch_location'] ?? '', $conn); ?></select></div>
                         <div class="profile-field"><label for="email">Email address *</label><input class="form-control" type="email" id="email" name="email" maxlength="150" value="<?php echo htmlspecialchars($user['email']); ?>" required></div>
                         <div class="profile-field"><label for="phone">Phone number</label><input class="form-control" id="phone" name="phone" maxlength="30" value="<?php echo htmlspecialchars((string) $user['phone']); ?>"></div>
-                        <div class="profile-field full"><label for="gst_number">GSTIN</label><input class="form-control" id="gst_number" name="gst_number" maxlength="20" value="<?php echo htmlspecialchars((string) ($user['gst_number'] ?? '')); ?>" placeholder="Example: 08ABCDE1234F1Z5"><small class="text-muted">Optional branch or company tax reference.</small></div>
                     </div>
                     <div class="profile-actions"><button class="btn profile-primary" type="submit"><i class="fa fa-save"></i> Save profile</button></div>
                 </form>
@@ -204,29 +180,6 @@ include 'assets/navbar.php';
                         <div class="profile-field" style="margin-top:13px"><label for="confirm_password">Confirm new password</label><input class="form-control" type="password" id="confirm_password" name="confirm_password" minlength="8" autocomplete="new-password" required></div>
                         <div class="password-meter">Use at least 8 characters. A mix of letters, numbers and symbols is recommended.</div>
                         <div class="profile-actions"><button class="btn btn-default" type="submit"><i class="fa fa-lock"></i> Change password</button></div>
-                    </form>
-                </div>
-            </section>
-            <section class="profile-card" style="margin-top:18px">
-                <div class="profile-card-head"><h3>Certificate numbering</h3><p>Choose the first certificate number and your report prefix.</p></div>
-                <div class="profile-card-body">
-                    <form method="post">
-                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken); ?>">
-                        <input type="hidden" name="action" value="update_numbering">
-                        <div class="profile-form-grid">
-                            <div class="profile-field">
-                                <label for="start_number">Starting certificate number</label>
-                                <input class="form-control" type="number" min="1" id="start_number" name="start_number" value="<?php echo (int) $numberingSettings['start_number']; ?>" <?php echo !empty($numberingSettings['locked']) ? 'readonly' : ''; ?>>
-                                <small class="text-muted"><?php echo !empty($numberingSettings['locked']) ? 'Locked because at least one certificate has already been created.' : 'You can set this only before the first certificate is saved.'; ?></small>
-                            </div>
-                            <div class="profile-field">
-                                <label for="report_prefix">Report prefix</label>
-                                <input class="form-control" type="text" maxlength="20" id="report_prefix" name="report_prefix" value="<?php echo htmlspecialchars((string) $numberingSettings['report_prefix']); ?>" placeholder="Example: GCL-">
-                                <small class="text-muted">Example output: <?php echo htmlspecialchars((string) $nextNumbering['report_no']); ?></small>
-                            </div>
-                        </div>
-                        <div class="password-meter" style="margin-top:16px">Next certificate will be <strong><?php echo (int) $nextNumbering['certi_no']; ?></strong> and next report number will be <strong><?php echo htmlspecialchars((string) $nextNumbering['report_no']); ?></strong>.</div>
-                        <div class="profile-actions"><button class="btn profile-primary" type="submit"><i class="fa fa-hashtag"></i> Save numbering settings</button></div>
                     </form>
                 </div>
             </section>

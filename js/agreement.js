@@ -17,11 +17,14 @@
     var addCustomerButton = document.getElementById("add_customer_button");
     var addCustomerForm = document.getElementById("customer_add_form");
     var addCustomerSubmit = document.getElementById("customer_add_submit");
+    var addRateCategoryButton = document.getElementById("add_rate_category_button");
+    var rateCategoryForm = document.getElementById("rate_category_form");
+    var rateCategorySubmit = document.getElementById("rate_category_submit");
     var customerTimer = null;
     var customerResults = [];
     var rateList = [];
     var rateConditionRules = [];
-    var rateOptionsHtml = '<option value="">Select category</option>';
+    var rateOptionsHtml = '';
     var colourOptionsHtml = '';
     var freshAgreementNo = form ? String(form.dataset.agreementNo || "") : "";
     var freshNextCertiNo = form ? String(form.dataset.nextCertiNo || "1") : "1";
@@ -41,7 +44,7 @@
         return '<tr>' +
             '<td><span class="row-no"></span><input type="hidden" class="row-status-input" name="' + name + '[row_status]" value="active"><input type="hidden" class="row-cancel-reason-input" name="' + name + '[row_cancel_reason]" value=""></td>' +
             '<td><input class="form-control ref-input" name="' + name + '[ref_no]" readonly></td>' +
-            '<td><select class="form-control rate-category" name="' + name + '[category]">' + rateOptionsHtml + '</select></td>' +
+            '<td><input class="form-control rate-category" list="rate_category_options" name="' + name + '[category]" autocomplete="off"></td>' +
             '<td><input class="form-control" name="' + name + '[particulars]"></td>' +
             '<td><input class="form-control colour-input" list="colour_master_options" name="' + name + '[color]"></td>' +
             '<td><div class="agreement-unit-field"><input class="form-control" name="' + name + '[gross_wt]"><select class="form-control unit-select" name="' + name + '[gross_wt_unit]">' + unitOptions + '</select></div></td>' +
@@ -52,7 +55,7 @@
             '<td><select class="form-control" name="' + name + '[a4_card]"><option value="A4" selected>A4</option><option value="ATM Card">ATM Card</option><option value="Postcard">Postcard</option></select></td>' +
             '<td class="topup-cell"><input class="topup-input" type="checkbox" name="' + name + '[topup]" value="1" title="Apply top-up"></td>' +
             '<td><input class="form-control money-input rate-input" name="' + name + '[rate]"></td>' +
-            '<td><input class="form-control money-input discount-input" name="' + name + '[discount_amount]" readonly><input type="hidden" class="discount-percent-input" name="' + name + '[discount_percent]"></td>' +
+            '<td><input class="form-control money-input discount-input" name="' + name + '[discount_amount]" disabled><input type="hidden" class="discount-percent-input" name="' + name + '[discount_percent]"></td>' +
             '<td><input class="form-control money-input amount-input" name="' + name + '[amount]"></td>' +
             '<td><button type="button" class="btn btn-default remove-row row-action" title="Remove row"><i class="fa fa-trash-o"></i></button></td>' +
         '</tr>';
@@ -134,6 +137,10 @@
     function setSelectValue(select, value) {
         if (!select) return;
         value = value == null ? "" : String(value);
+        if (select.tagName && select.tagName.toLowerCase() !== "select") {
+            select.value = value;
+            return;
+        }
         if (value !== "" && !Array.prototype.some.call(select.options, function (option) { return option.value === value; })) {
             var option = document.createElement("option");
             option.value = value;
@@ -580,6 +587,10 @@
         }
     }
 
+    function rateAllowsCdcDiscount(rate) {
+        return String(rate && rate.cdc ? rate.cdc : "").trim().toUpperCase() === "Y";
+    }
+
     function numericInput(row, name) {
         var input = row.querySelector('[name$="[' + name + ']"]');
         var value = input ? parseFloat(String(input.value || "").replace(/[^0-9.\-]/g, "")) : 0;
@@ -588,6 +599,10 @@
 
     function rateCodeValue(rate) {
         return parseInt(String(rate && rate.rate_code ? rate.rate_code : "").replace(/[^0-9\-]/g, ""), 10) || 0;
+    }
+
+    function normalizeCategory(value) {
+        return String(value || "").replace(/\s+/g, " ").trim().toUpperCase();
     }
 
     function currentLocationName() {
@@ -658,7 +673,7 @@
             }
         });
 
-        var discountPercent = mouDiscountPercent();
+        var discountPercent = rateAllowsCdcDiscount(rate) ? mouDiscountPercent() : 0;
         var discountAmount = discountPercent > 0 ? Math.round((amount * discountPercent / 100) * 100) / 100 : 0;
         return {
             grossAmount: Math.max(0, amount),
@@ -670,14 +685,11 @@
     }
 
     function buildRateOptions() {
-        rateOptionsHtml = '<option value="">Select category</option>' + rateList.map(function (rate) {
-            return '<option value="' + escapeHtml(rate.description) + '" data-rate-id="' + rate.id + '" data-rate-code="' + escapeHtml(rate.rate_code) + '">' + escapeHtml(rate.description) + '</option>';
+        rateOptionsHtml = rateList.map(function (rate) {
+            var label = rate.rate_code ? rate.description + " (Code: " + rate.rate_code + ")" : rate.description;
+            return '<option value="' + escapeHtml(rate.description) + '" label="' + escapeHtml(label) + '"></option>';
         }).join("");
-        Array.prototype.forEach.call(body.querySelectorAll(".rate-category"), function (select) {
-            var oldValue = select.value;
-            select.innerHTML = rateOptionsHtml;
-            select.value = oldValue;
-        });
+        $("#rate_category_options").html(rateOptionsHtml);
     }
 
     function rateById(id) {
@@ -688,12 +700,20 @@
         return null;
     }
 
+    function rateByDescription(description) {
+        var wanted = normalizeCategory(description);
+        if (!wanted) return null;
+        for (var i = 0; i < rateList.length; i++) {
+            if (normalizeCategory(rateList[i].description) === wanted) return rateList[i];
+        }
+        return null;
+    }
+
     function applyRateToRow(row) {
         if (isRowCancelled(row)) return;
         var select = row.querySelector(".rate-category");
         if (!select) return;
-        var option = select.options[select.selectedIndex];
-        var rate = rateById(option ? option.getAttribute("data-rate-id") : 0);
+        var rate = rateByDescription(select.value);
         var value = selectedRate(rate);
         var formatted = value > 0 ? value.toFixed(2) : "";
         var rateInput = row.querySelector(".rate-input");
@@ -704,8 +724,7 @@
     function selectedRateForRow(row) {
         var select = row.querySelector(".rate-category");
         if (!select) return null;
-        var option = select.options[select.selectedIndex];
-        return rateById(option ? option.getAttribute("data-rate-id") : 0);
+        return rateByDescription(select.value);
     }
 
     function calculateRowAmount(row, showWarning) {
@@ -745,7 +764,73 @@
             .done(function (response) {
                 rateList = response && response.rates ? response.rates : [];
                 buildRateOptions();
+                refreshAllRates();
             });
+    }
+
+    function openRateCategoryModal() {
+        if (!rateCategoryForm) return;
+        rateCategoryForm.reset();
+        $("#new_rate_member,#new_rate_non_member").val("0");
+        $("#rate_category_modal").modal("show");
+        window.setTimeout(function () { $("#new_rate_description").focus(); }, 250);
+    }
+
+    function saveRateCategory(event) {
+        event.preventDefault();
+        var description = $.trim($("#new_rate_description").val());
+        if (!description) {
+            AppToast.error("Category name is required.");
+            $("#new_rate_description").focus();
+            return;
+        }
+        var oldHtml = rateCategorySubmit ? rateCategorySubmit.innerHTML : "";
+        if (rateCategorySubmit) {
+            rateCategorySubmit.disabled = true;
+            rateCategorySubmit.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving...';
+        }
+        $.ajax({
+            url: "rate-save.php",
+            method: "POST",
+            data: $(rateCategoryForm).serialize(),
+            dataType: "json"
+        }).done(function (response) {
+            if (!response || response.status !== "success") {
+                AppToast.error(response && response.message ? response.message : "Unable to save category.");
+                return;
+            }
+            var saved = response.rate || null;
+            if (saved) {
+                var existingIndex = -1;
+                for (var i = 0; i < rateList.length; i++) {
+                    if (parseInt(rateList[i].id, 10) === parseInt(saved.id, 10)) existingIndex = i;
+                }
+                if (existingIndex >= 0) rateList[existingIndex] = saved;
+                else rateList.push(saved);
+                rateList.sort(function (a, b) {
+                    return String(a.description || "").localeCompare(String(b.description || ""));
+                });
+                buildRateOptions();
+                var focused = body.querySelector(".rate-category:focus");
+                if (focused && !focused.value) {
+                    focused.value = saved.description || "";
+                    applyRateToRow(focused.closest("tr"));
+                }
+            } else {
+                loadRates();
+            }
+            $("#rate_category_modal").modal("hide");
+            AppToast.success("Category saved.");
+        }).fail(function (xhr) {
+            var message = "Unable to save category.";
+            try { message = JSON.parse(xhr.responseText).message || message; } catch (error) {}
+            AppToast.error(message);
+        }).always(function () {
+            if (rateCategorySubmit) {
+                rateCategorySubmit.disabled = false;
+                rateCategorySubmit.innerHTML = oldHtml || '<i class="fa fa-save"></i> Save Category';
+            }
+        });
     }
 
     function loadRateConditions() {
@@ -1177,6 +1262,9 @@
     });
 
     body.addEventListener("input", function (event) {
+        if (event.target.classList.contains("rate-category")) {
+            applyRateToRow(event.target.closest("tr"));
+        }
         if (event.target.classList.contains("amount-input")) updateTestingCharges();
         if (event.target.classList.contains("pcs-input")) updatePcsTotal();
         if (
@@ -1210,6 +1298,9 @@
     Array.prototype.forEach.call(form.querySelectorAll("input[name='member_status']"), function (input) {
         input.addEventListener("change", refreshAllRates);
     });
+
+    if (addRateCategoryButton) addRateCategoryButton.addEventListener("click", openRateCategoryModal);
+    if (rateCategoryForm) rateCategoryForm.addEventListener("submit", saveRateCategory);
 
     form.addEventListener("submit", function (event) {
         event.preventDefault();

@@ -161,7 +161,7 @@ $rawItems = isset($_POST['items']) && is_array($_POST['items']) ? $_POST['items'
 $items = [];
 $pcsTotal = 0;
 $rateMap = [];
-$rateResult = $conn->query('SELECT rate_code, description, rate_member, rate_non_member FROM sm_rate_master');
+$rateResult = $conn->query('SELECT rate_code, description, rate_member, rate_non_member, cdc FROM sm_rate_master');
 if ($rateResult) {
     while ($rateRow = $rateResult->fetch_assoc()) {
         $rateMap[trim((string) ($rateRow['description'] ?? ''))] = $rateRow;
@@ -223,8 +223,10 @@ foreach ($rawItems as $rawItem) {
         exit;
     }
     $grossAmount = (float) $calculated['amount'];
-    $discountAmount = $mouDiscountPercent > 0 ? round($grossAmount * ($mouDiscountPercent / 100), 2) : 0.0;
-    $item['discount_percent'] = agreement_money($mouDiscountPercent);
+    $cdcAllowed = strtoupper(trim((string) ($rate['cdc'] ?? ''))) === 'Y';
+    $discountPercent = $cdcAllowed ? $mouDiscountPercent : 0.0;
+    $discountAmount = $discountPercent > 0 ? round($grossAmount * ($discountPercent / 100), 2) : 0.0;
+    $item['discount_percent'] = agreement_money($discountPercent);
     $item['discount_amount'] = agreement_money($discountAmount);
     $item['amount'] = agreement_money(max(0, $grossAmount - $discountAmount));
     if ($item['row_status'] !== 'cancelled') {
@@ -291,7 +293,7 @@ $existingAgreement = null;
 $previousRowsByRef = [];
 if ($editAgreementId > 0 && $editAgreementNo > 0) {
     $scopeSql = user_branch_scope_sql($conn, $userId, 'user_id');
-    $editStmt = $conn->prepare("SELECT id, agreement_no, collection_center_id, collection_center_code, collection_center_name FROM sm_stone_agreements WHERE id = ? AND agreement_no = ? AND {$scopeSql} LIMIT 1");
+    $editStmt = $conn->prepare("SELECT id, agreement_no, agreement_branch_location, collection_center_id, collection_center_code, collection_center_name FROM sm_stone_agreements WHERE id = ? AND agreement_no = ? AND {$scopeSql} LIMIT 1");
     if (!$editStmt) {
         http_response_code(500);
         echo json_encode(['status' => 'error', 'message' => 'Unable to validate agreement for editing.']);
@@ -346,6 +348,13 @@ if ($collectionCenterCode === '') {
 if ($collectionCenterName === '') {
     $collectionCenterName = $collectionCenterCode;
 }
+$agreementBranchLocation = user_branch_location_clean($locationName, $conn);
+if ($existingAgreement && trim((string) ($existingAgreement['agreement_branch_location'] ?? '')) !== '') {
+    $agreementBranchLocation = user_branch_location_clean($existingAgreement['agreement_branch_location'], $conn);
+}
+if ($agreementBranchLocation === '') {
+    $agreementBranchLocation = user_branch_location_for_user($conn, $userId);
+}
 
 $newlyCancelledRows = [];
 if ($existingAgreement) {
@@ -366,7 +375,7 @@ if ($existingAgreement) {
 
 $numberLockName = '';
 if (!$existingAgreement) {
-    $lockBranch = function_exists('user_branch_storage_code') ? user_branch_storage_code($conn, $userId) : ('user_' . $userId);
+    $lockBranch = $agreementBranchLocation !== '' ? ('branch_' . strtolower($agreementBranchLocation)) : (function_exists('user_branch_storage_code') ? user_branch_storage_code($conn, $userId) : ('user_' . $userId));
     $numberLockName = 'iigj_agreement_number_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $lockBranch);
     $lockStmt = $conn->prepare('SELECT GET_LOCK(?, 10) AS lock_status');
     if (!$lockStmt) {
@@ -391,7 +400,7 @@ if ($existingAgreement) {
     $id = (int) $existingAgreement['id'];
     $agreementNo = (int) $existingAgreement['agreement_no'];
     $stmt = $conn->prepare("UPDATE sm_stone_agreements SET
-        docket_no = ?, customer_name = ?, depositor_name = ?, member_status = ?, mou_cdc = ?, category = ?, gst_no = ?, address = ?, mobile_no = ?, email = ?, id_no = ?, agreement_date = ?, agreement_time = ?, delivery_date = ?, delivery_time = ?, delivered = ?, items_json = ?, pcs_total = ?, testing_charges = ?, payment_cash = ?, payment_cheque = ?, payment_neft = ?, payment_card = ?, payment_tds = ?, cheque_no = ?, due_amount = ?, refund_amount = ?, prepared_by = ?, remarks = ?, signature_mode = ?, customer_signature = ?, updated_at = NOW()
+        agreement_branch_location = ?, docket_no = ?, customer_name = ?, depositor_name = ?, member_status = ?, mou_cdc = ?, category = ?, gst_no = ?, address = ?, mobile_no = ?, email = ?, id_no = ?, agreement_date = ?, agreement_time = ?, delivery_date = ?, delivery_time = ?, delivered = ?, items_json = ?, pcs_total = ?, testing_charges = ?, payment_cash = ?, payment_cheque = ?, payment_neft = ?, payment_card = ?, payment_tds = ?, cheque_no = ?, due_amount = ?, refund_amount = ?, prepared_by = ?, remarks = ?, signature_mode = ?, customer_signature = ?, updated_at = NOW()
         WHERE id = ?");
     if (!$stmt) {
         $conn->rollback();
@@ -400,7 +409,8 @@ if ($existingAgreement) {
         exit;
     }
     $stmt->bind_param(
-        'sssssssssssssssisiddddddsddssssi',
+        'ssssssssssssssssisiddddddsddssssi',
+        $agreementBranchLocation,
         $docketNo,
         $customerName,
         $depositorName,
@@ -435,7 +445,7 @@ if ($existingAgreement) {
         $id
     );
 } else {
-    $agreementNo = agreement_next_no($conn, $userId);
+    $agreementNo = agreement_next_no_for_branch($conn, $agreementBranchLocation, $userId);
     $nextCertificateInfoForAgreement = atm_next_certificate_number($conn, $userId);
     $items = agreement_save_assign_refs(
         $items,
@@ -451,8 +461,8 @@ if ($existingAgreement) {
     unset($item);
     $itemsJson = json_encode($items, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     $stmt = $conn->prepare("INSERT INTO sm_stone_agreements
-        (user_id, agreement_no, collection_center_id, collection_center_code, collection_center_name, docket_no, customer_name, depositor_name, member_status, mou_cdc, category, gst_no, address, mobile_no, email, id_no, agreement_date, agreement_time, delivery_date, delivery_time, delivered, items_json, pcs_total, testing_charges, payment_cash, payment_cheque, payment_neft, payment_card, payment_tds, cheque_no, due_amount, refund_amount, prepared_by, remarks, signature_mode, customer_signature)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        (user_id, agreement_branch_location, agreement_no, collection_center_id, collection_center_code, collection_center_name, docket_no, customer_name, depositor_name, member_status, mou_cdc, category, gst_no, address, mobile_no, email, id_no, agreement_date, agreement_time, delivery_date, delivery_time, delivered, items_json, pcs_total, testing_charges, payment_cash, payment_cheque, payment_neft, payment_card, payment_tds, cheque_no, due_amount, refund_amount, prepared_by, remarks, signature_mode, customer_signature)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     if (!$stmt) {
         $conn->rollback();
         agreement_save_release_number_lock($conn, $numberLockName);
@@ -461,8 +471,9 @@ if ($existingAgreement) {
         exit;
     }
     $stmt->bind_param(
-        'iiisssssssssssssssssisiddddddsddssss',
+        'isiisssssssssssssssssisiddddddsddssss',
         $userId,
+        $agreementBranchLocation,
         $agreementNo,
         $collectionCenterId,
         $collectionCenterCode,

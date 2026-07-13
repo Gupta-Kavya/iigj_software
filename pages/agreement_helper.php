@@ -9,11 +9,30 @@ function agreement_index_exists($conn, $table, $index)
     return $result && $result->num_rows > 0;
 }
 
+function agreement_column_exists($conn, $table, $column)
+{
+    $table = preg_replace('/[^A-Za-z0-9_]/', '', (string) $table);
+    $column = $conn->real_escape_string((string) $column);
+    $result = @$conn->query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+    return $result && $result->num_rows > 0;
+}
+
+function agreement_add_index_if_missing($conn, $table, $index, $definition)
+{
+    $table = preg_replace('/[^A-Za-z0-9_]/', '', (string) $table);
+    $index = preg_replace('/[^A-Za-z0-9_]/', '', (string) $index);
+    if ($table === '' || $index === '' || agreement_index_exists($conn, $table, $index)) {
+        return true;
+    }
+    return (bool) @$conn->query("ALTER TABLE `{$table}` ADD INDEX `{$index}` {$definition}");
+}
+
 function agreement_table_ready($conn)
 {
     $ready = (bool) @$conn->query("CREATE TABLE IF NOT EXISTS `sm_stone_agreements` (
         `id` int(11) NOT NULL AUTO_INCREMENT,
         `user_id` int(11) NOT NULL,
+        `agreement_branch_location` varchar(60) DEFAULT NULL,
         `agreement_no` int(11) NOT NULL,
         `collection_center_id` int(11) NOT NULL DEFAULT 0,
         `collection_center_code` varchar(6) DEFAULT NULL,
@@ -67,6 +86,7 @@ function agreement_table_ready($conn)
         'customer_signature' => "ALTER TABLE `sm_stone_agreements` ADD `customer_signature` longtext AFTER `signature_mode`",
         'agreement_status' => "ALTER TABLE `sm_stone_agreements` ADD `agreement_status` varchar(40) NOT NULL DEFAULT 'IN_PROCESS' AFTER `delivered`",
         'status_updated_at' => "ALTER TABLE `sm_stone_agreements` ADD `status_updated_at` datetime DEFAULT NULL AFTER `agreement_status`",
+        'agreement_branch_location' => "ALTER TABLE `sm_stone_agreements` ADD `agreement_branch_location` varchar(60) DEFAULT NULL AFTER `user_id`",
         'collection_center_id' => "ALTER TABLE `sm_stone_agreements` ADD `collection_center_id` int(11) NOT NULL DEFAULT 0 AFTER `agreement_no`",
         'collection_center_code' => "ALTER TABLE `sm_stone_agreements` ADD `collection_center_code` varchar(6) DEFAULT NULL AFTER `collection_center_id`",
         'collection_center_name' => "ALTER TABLE `sm_stone_agreements` ADD `collection_center_name` varchar(120) DEFAULT NULL AFTER `collection_center_code`",
@@ -77,6 +97,20 @@ function agreement_table_ready($conn)
             @$conn->query($sql);
         }
     }
+    @$conn->query("UPDATE sm_stone_agreements a
+        INNER JOIN sm_collection_centers cc ON cc.id = a.collection_center_id
+        SET a.agreement_branch_location = cc.branch_location
+        WHERE COALESCE(a.agreement_branch_location, '') = ''
+            AND COALESCE(cc.branch_location, '') <> ''");
+    @$conn->query("UPDATE sm_stone_agreements a
+        INNER JOIN sm_users u ON u.id = a.user_id
+        SET a.agreement_branch_location = u.branch_location
+        WHERE COALESCE(a.agreement_branch_location, '') = ''
+            AND COALESCE(a.collection_center_id, 0) = 0
+            AND COALESCE(u.branch_location, '') <> ''");
+    agreement_add_index_if_missing($conn, 'sm_stone_agreements', 'idx_agreement_branch_date_no', '(`agreement_branch_location`, `agreement_date`, `agreement_no`)');
+    agreement_add_index_if_missing($conn, 'sm_stone_agreements', 'idx_agreement_branch_status', '(`agreement_branch_location`, `agreement_status`)');
+    agreement_add_index_if_missing($conn, 'sm_stone_agreements', 'idx_agreement_date', '(`agreement_date`)');
 
     return agreement_items_table_ready($conn) && form_master_table_ready($conn);
 }
@@ -170,6 +204,8 @@ function agreement_items_table_ready($conn)
             @$conn->query($sql);
         }
     }
+    agreement_add_index_if_missing($conn, 'sm_stone_agreement_items', 'idx_items_user_category_status', '(`user_id`, `category`, `row_status`)');
+    agreement_add_index_if_missing($conn, 'sm_stone_agreement_items', 'idx_items_agreement_status', '(`agreement_id`, `row_status`)');
 
     return true;
 }
@@ -293,6 +329,24 @@ function agreement_form_data_type_ready($conn)
             }
             $stmt->close();
         }
+    }
+    if (agreement_column_exists($conn, 'sm_form_data', 'location') && agreement_column_exists($conn, 'sm_form_data', 'date')) {
+        agreement_add_index_if_missing($conn, 'sm_form_data', 'idx_form_location_date', '(`location`, `date`(20))');
+    }
+    if (agreement_column_exists($conn, 'sm_form_data', 'user_id') && agreement_column_exists($conn, 'sm_form_data', 'ag_no') && agreement_column_exists($conn, 'sm_form_data', 'certi_no') && agreement_column_exists($conn, 'sm_form_data', 'type')) {
+        agreement_add_index_if_missing($conn, 'sm_form_data', 'idx_form_user_ag_certi_type', '(`user_id`, `ag_no`, `certi_no`, `type`)');
+    }
+    if (agreement_column_exists($conn, 'sm_form_data', 'location') && agreement_column_exists($conn, 'sm_form_data', 'ag_no') && agreement_column_exists($conn, 'sm_form_data', 'certi_no') && agreement_column_exists($conn, 'sm_form_data', 'type')) {
+        agreement_add_index_if_missing($conn, 'sm_form_data', 'idx_form_location_ag_certi_type', '(`location`, `ag_no`, `certi_no`, `type`)');
+    }
+    if (agreement_column_exists($conn, 'sm_form_data', 'location') && agreement_column_exists($conn, 'sm_form_data', 'certi_no')) {
+        agreement_add_index_if_missing($conn, 'sm_form_data', 'idx_form_location_certi', '(`location`, `certi_no`)');
+    }
+    if (agreement_column_exists($conn, 'sm_form_data', 'location') && agreement_column_exists($conn, 'sm_form_data', 'stone_name') && agreement_column_exists($conn, 'sm_form_data', 'date')) {
+        agreement_add_index_if_missing($conn, 'sm_form_data', 'idx_form_location_stone_date', '(`location`, `stone_name`, `date`(20))');
+    }
+    if (agreement_column_exists($conn, 'sm_form_data', 'report_no')) {
+        agreement_add_index_if_missing($conn, 'sm_form_data', 'idx_form_report_no', '(`report_no`)');
     }
 
     return true;
@@ -419,9 +473,42 @@ function agreement_ensure_form_master_for_certificate($conn, $userId, $agreement
 function agreement_next_no($conn, $userId)
 {
     agreement_table_ready($conn);
-    $scopeSql = user_branch_scope_sql($conn, $userId, 'user_id');
-    $result = @$conn->query("SELECT MAX(agreement_no) AS last_no FROM sm_stone_agreements WHERE {$scopeSql}");
+    $branchLocation = function_exists('user_branch_location_for_user') ? user_branch_location_for_user($conn, $userId) : '';
+    if ($branchLocation !== '') {
+        return agreement_next_no_for_branch($conn, $branchLocation, $userId);
+    }
+    $userId = (int) $userId;
+    $result = @$conn->query("SELECT MAX(agreement_no) AS last_no FROM sm_stone_agreements WHERE user_id = {$userId}");
     $row = $result ? $result->fetch_assoc() : null;
+    return max(1, ((int) ($row['last_no'] ?? 0)) + 1);
+}
+
+function agreement_next_no_for_branch($conn, $branchLocation, $fallbackUserId = 0)
+{
+    agreement_table_ready($conn);
+    user_collection_center_ready($conn);
+    $branchLocation = user_branch_location_clean($branchLocation, $conn);
+    if ($branchLocation === '') {
+        $fallbackUserId = (int) $fallbackUserId;
+        $result = @$conn->query("SELECT MAX(agreement_no) AS last_no FROM sm_stone_agreements WHERE user_id = {$fallbackUserId}");
+        $row = $result ? $result->fetch_assoc() : null;
+        return max(1, ((int) ($row['last_no'] ?? 0)) + 1);
+    }
+
+    $stmt = $conn->prepare("SELECT MAX(a.agreement_no) AS last_no
+        FROM sm_stone_agreements a
+        LEFT JOIN sm_collection_centers cc ON cc.id = a.collection_center_id
+        LEFT JOIN sm_users u ON u.id = a.user_id
+        WHERE a.agreement_branch_location = ?
+            OR (COALESCE(a.agreement_branch_location, '') = '' AND cc.branch_location = ?)
+            OR (COALESCE(a.agreement_branch_location, '') = '' AND COALESCE(a.collection_center_id, 0) = 0 AND u.branch_location = ?)");
+    if (!$stmt) {
+        return 1;
+    }
+    $stmt->bind_param('sss', $branchLocation, $branchLocation, $branchLocation);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
     return max(1, ((int) ($row['last_no'] ?? 0)) + 1);
 }
 

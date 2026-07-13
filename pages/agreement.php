@@ -586,10 +586,12 @@ include "assets/navbar.php";
                             </div>
                     </section>
                     <datalist id="colour_master_options"></datalist>
+                    <datalist id="rate_category_options"></datalist>
                     <section class="agreement-card">
                         <div class="agreement-card-head">
-                            <h3>Stone Details</h3><button type="button" class="btn btn-default btn-sm"
-                                id="add_agreement_row"><i class="fa fa-plus"></i> Add Row</button>
+                            <h3>Stone Details</h3><div><button type="button" class="btn btn-default btn-sm"
+                                id="add_rate_category_button"><i class="fa fa-tags"></i> Add Category</button> <button type="button" class="btn btn-default btn-sm"
+                                id="add_agreement_row"><i class="fa fa-plus"></i> Add Row</button></div>
                         </div>
                         <div class="agreement-table-wrap">
                             <table class="table table-bordered agreement-items">
@@ -707,6 +709,31 @@ include "assets/navbar.php";
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="customer_add_submit"><i class="fa fa-save"></i> Save Customer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal modern-modal" id="rate_category_modal" tabindex="-1" role="dialog" aria-labelledby="rateCategoryTitle">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="rate_category_form">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title" id="rateCategoryTitle">Add Agreement Category</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-sm-12 form-group"><label>Category Name *</label><input class="form-control" name="description" id="new_rate_description" maxlength="255" required></div>
+                        <div class="col-sm-4 form-group"><label>Member Rate</label><input class="form-control" name="rate_member" id="new_rate_member" inputmode="decimal" value="0"></div>
+                        <div class="col-sm-4 form-group"><label>Non-Member Rate</label><input class="form-control" name="rate_non_member" id="new_rate_non_member" inputmode="decimal" value="0"></div>
+                        <div class="col-sm-4 form-group"><label>CDC Discount</label><div class="form-control agreement-checks"><label><input type="checkbox" name="cdc" id="new_rate_cdc" value="Y"> Yes</label></div></div>
+                        <div class="col-sm-12 form-group"><label>Remark</label><input class="form-control" name="remark" id="new_rate_remark" maxlength="255"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="rate_category_submit"><i class="fa fa-save"></i> Save Category</button>
                 </div>
             </form>
         </div>

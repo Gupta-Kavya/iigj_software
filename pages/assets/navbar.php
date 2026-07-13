@@ -16,6 +16,15 @@ $navbarCanUseStone = true;
 $navbarCanUseDiamond = true;
 $navbarCanUseJewellery = true;
 $navbarCanUseRudraksha = true;
+$navbarUserBranch = '';
+$navbarUserStmt = $conn->prepare("SELECT branch_location FROM sm_users WHERE id = ? LIMIT 1");
+if ($navbarUserStmt) {
+    $navbarUserStmt->bind_param('i', $navbarUserId);
+    $navbarUserStmt->execute();
+    $navbarUserRow = $navbarUserStmt->get_result()->fetch_assoc();
+    $navbarUserStmt->close();
+    $navbarUserBranch = trim((string) ($navbarUserRow['branch_location'] ?? ''));
+}
 $currentPage = basename($_SERVER['PHP_SELF']);
 $masterPages = ['add-master.php', 'stone-master-menu.php', 'shape-cut-master-menu.php', 'ri-master-menu.php', 'magni-master-menu.php', 'colour-master-menu.php', 'colour-report-type-master.php', 'collection-center-master.php'];
 if (auth_is_super_admin()) {
@@ -32,7 +41,7 @@ if (auth_is_super_admin()) {
     <meta name="description" content="">
     <meta name="author" content="">
 
-    <title>Startmin - Bootstrap Admin Theme</title>
+    <title>IIGJ Research & Laboratories</title>
 
     <!-- Bootstrap Core CSS -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -81,7 +90,10 @@ if (auth_is_super_admin()) {
         <!-- Navigation -->
         <nav class="navbar navbar-inverse navbar-fixed-top app-navbar" role="navigation">
             <div class="navbar-header">
-                <a class="navbar-brand app-brand" href="index.php"><i class="fa fa-diamond"></i> SMARTLINK SOFT</a>
+                <a class="navbar-brand app-brand app-client-brand" href="index.php">
+                    <span class="app-brand-logo-wrap"><img src="assets/agreement-gjepc.svg" alt="GJEPC"></span>
+                    <span class="app-brand-logo-wrap app-brand-logo-iigj"><img src="assets/agreement-iigj.png" alt="IIGJ"></span>
+                </a>
             </div>
 
             <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
@@ -98,7 +110,7 @@ if (auth_is_super_admin()) {
                         <i class="fa fa-angle-left" aria-hidden="true"></i>
                     </button>
                 </li>
-                <li><a href="index.php"><i class="fa fa-home fa-fw"></i> Laboratory Panel</a></li>
+                <li><a href="index.php"><i class="fa fa-flask fa-fw"></i> Lab Workspace</a></li>
             </ul>
 
             <ul class="nav navbar-right navbar-top-links">
@@ -183,12 +195,16 @@ if (auth_is_super_admin()) {
                 <div class="sidebar-nav navbar-collapse">
                     <ul class="nav" id="side-menu">
 
-                        <!-- <li>
-                            <div class="software_owner_logo app-sidebar-logo" style = "text-decoration:none;">
-                                <img src="assets/software_name.jpg" alt="" width="100%">
+                        <li class="app-sidebar-profile">
+                            <div class="app-sidebar-profile-card">
+                                <div class="app-sidebar-profile-text">
+                                    <strong><?php echo htmlspecialchars(auth_current_user_name()); ?></strong>
+                                    <span><?php echo htmlspecialchars($navbarUserBranch !== '' ? $navbarUserBranch : (auth_is_super_admin() ? 'Super Admin' : 'Branch User')); ?></span>
+                                </div>
                             </div>
-                        </li> -->
+                        </li>
 
+                        <li class="app-nav-section">Operations</li>
                         <li>
                             <a href="index.php" class="<?php echo $currentPage === 'index.php' ? 'active' : ''; ?>"><i
                                     class="fa fa-dashboard fa-fw"></i> Dashboard</a>
@@ -200,6 +216,11 @@ if (auth_is_super_admin()) {
                                     class="<?php echo in_array($currentPage, ['agreement.php', 'agreement-print.php'], true) ? 'active' : ''; ?>"><i
                                         class="fa fa-file-text-o fa-fw"></i> Stone Agreement</a>
                             </li>
+                            <li>
+                                <a href="../pages/agreement-reports.php"
+                                    class="<?php echo $currentPage === 'agreement-reports.php' ? 'active' : ''; ?>"><i
+                                        class="fa fa-table fa-fw"></i> Agreement Reports</a>
+                            </li>
                         <?php endif; ?>
 
                         <?php if (auth_is_super_admin()): ?>
@@ -210,6 +231,7 @@ if (auth_is_super_admin()) {
                             </li>
                         <?php endif; ?>
 
+                        <li class="app-nav-section">Feeding</li>
                         <?php if ($navbarCanUseStone): ?>
                             <li>
                                 <a href="../pages/c_stone.php"
@@ -252,6 +274,7 @@ if (auth_is_super_admin()) {
                         </li>
                         <?php endif; ?> -->
 
+                        <li class="app-nav-section">Reports & Assets</li>
                         <?php if ($navbarCanUseAnyCertificate): ?>
                             <li>
                                 <a href="../pages/image_manager.php"
@@ -284,6 +307,7 @@ if (auth_is_super_admin()) {
                             </li>
                         <?php endif; ?>
 
+                        <li class="app-nav-section">Administration</li>
                         <li>
                             <a href="../pages/apiSettings.php"
                                 class="<?php echo $currentPage === 'apiSettings.php' ? 'active' : ''; ?>"><i

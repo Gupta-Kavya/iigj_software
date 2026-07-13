@@ -30,7 +30,7 @@ if ($agreementId <= 0) {
 }
 
 $scopeSql = user_branch_scope_sql($conn, $userId, 'a.user_id');
-$stmt = $conn->prepare("SELECT a.*, u.company_name FROM sm_stone_agreements a LEFT JOIN sm_users u ON u.id = a.user_id WHERE a.id = ? AND {$scopeSql} LIMIT 1");
+$stmt = $conn->prepare("SELECT a.* FROM sm_stone_agreements a LEFT JOIN sm_users u ON u.id = a.user_id WHERE a.id = ? AND {$scopeSql} LIMIT 1");
 if (!$stmt) {
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => 'Unable to load agreement.']);

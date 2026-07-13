@@ -15,6 +15,11 @@ function user_branch_location_default_rows()
 
 function user_branch_location_ready($conn)
 {
+    $userGstColumn = @$conn->query("SHOW COLUMNS FROM `sm_users` LIKE 'gst_number'");
+    if ($userGstColumn && $userGstColumn->num_rows > 0) {
+        @$conn->query("ALTER TABLE `sm_users` DROP COLUMN `gst_number`");
+    }
+
     $column = @$conn->query("SHOW COLUMNS FROM `sm_users` LIKE 'branch_location'");
     if ($column && $column->num_rows > 0) {
         $row = $column->fetch_assoc();
@@ -22,13 +27,24 @@ function user_branch_location_ready($conn)
             @$conn->query("ALTER TABLE `sm_users` MODIFY `branch_location` varchar(60) DEFAULT NULL");
         }
     } else {
-        @$conn->query("ALTER TABLE `sm_users` ADD `branch_location` varchar(60) DEFAULT NULL AFTER `company_name`");
+        @$conn->query("ALTER TABLE `sm_users` ADD `branch_location` varchar(60) DEFAULT NULL AFTER `full_name`");
+    }
+
+    $userCompanyColumn = @$conn->query("SHOW COLUMNS FROM `sm_users` LIKE 'company_name'");
+    if ($userCompanyColumn && $userCompanyColumn->num_rows > 0) {
+        @$conn->query("ALTER TABLE `sm_users` DROP COLUMN `company_name`");
     }
 
     $ready = (bool) @$conn->query("CREATE TABLE IF NOT EXISTS `sm_branch_locations` (
         `id` int(11) NOT NULL AUTO_INCREMENT,
         `code` varchar(60) NOT NULL,
         `name` varchar(120) NOT NULL,
+        `address` text,
+        `phone` varchar(120) DEFAULT NULL,
+        `email` varchar(150) DEFAULT NULL,
+        `website` varchar(150) DEFAULT NULL,
+        `cin_no` varchar(80) DEFAULT NULL,
+        `gst_no` varchar(80) DEFAULT NULL,
         `active` tinyint(1) NOT NULL DEFAULT 1,
         `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
         `updated_at` datetime DEFAULT NULL,
@@ -37,6 +53,20 @@ function user_branch_location_ready($conn)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
     if ($ready) {
+        $columns = [
+            'address' => "ALTER TABLE `sm_branch_locations` ADD `address` text AFTER `name`",
+            'phone' => "ALTER TABLE `sm_branch_locations` ADD `phone` varchar(120) DEFAULT NULL AFTER `address`",
+            'email' => "ALTER TABLE `sm_branch_locations` ADD `email` varchar(150) DEFAULT NULL AFTER `phone`",
+            'website' => "ALTER TABLE `sm_branch_locations` ADD `website` varchar(150) DEFAULT NULL AFTER `email`",
+            'cin_no' => "ALTER TABLE `sm_branch_locations` ADD `cin_no` varchar(80) DEFAULT NULL AFTER `website`",
+            'gst_no' => "ALTER TABLE `sm_branch_locations` ADD `gst_no` varchar(80) DEFAULT NULL AFTER `cin_no`",
+        ];
+        foreach ($columns as $column => $sql) {
+            $exists = @$conn->query("SHOW COLUMNS FROM `sm_branch_locations` LIKE '" . $conn->real_escape_string($column) . "'");
+            if ($exists && $exists->num_rows === 0) {
+                @$conn->query($sql);
+            }
+        }
         user_branch_location_seed($conn);
     }
 
@@ -70,6 +100,16 @@ function user_branch_location_seed($conn)
     }
 
     $insert->close();
+
+    $defaultAddress = 'SP-111, R.K. Derewala Tower, KGK Campus, Near SEZ Phase 1,Sitapura Industrial Area, Jaipur-302022';
+    @$conn->query("UPDATE sm_branch_locations SET
+        address = IF(COALESCE(address, '') = '', '" . $conn->real_escape_string($defaultAddress) . "', address),
+        phone = IF(COALESCE(phone, '') = '', '+91-141-2770995, 2941470', phone),
+        email = IF(COALESCE(email, '') = '', 'Info@iigjrlc.org', email),
+        website = IF(COALESCE(website, '') = '', 'iigjrlc.org', website),
+        cin_no = IF(COALESCE(cin_no, '') = '', 'U73100MH2019NPL328412', cin_no),
+        gst_no = IF(COALESCE(gst_no, '') = '', '08AHPPG9551N1JZ', gst_no)
+        WHERE code = 'SITAPURA'");
 }
 
 function user_branch_locations($conn = null, $includeEmpty = true)
@@ -134,10 +174,57 @@ function user_branch_location_label($conn, $code)
     return $locations[$code] ?? $code;
 }
 
+function user_branch_location_details($conn, $code)
+{
+    user_branch_location_ready($conn);
+    $code = user_branch_location_clean($code, $conn);
+    $sitapuraDefaults = [
+        'address' => 'SP-111, R.K. Derewala Tower, KGK Campus, Near SEZ Phase 1,Sitapura Industrial Area, Jaipur-302022',
+        'phone' => '+91-141-2770995, 2941470',
+        'email' => 'Info@iigjrlc.org',
+        'website' => 'iigjrlc.org',
+        'cin_no' => 'U73100MH2019NPL328412',
+        'gst_no' => '08AHPPG9551N1JZ',
+    ];
+    $defaults = [
+        'code' => $code,
+        'name' => user_branch_location_label($conn, $code),
+        'address' => '',
+        'phone' => '',
+        'email' => '',
+        'website' => '',
+        'cin_no' => '',
+        'gst_no' => '',
+    ];
+    if ($code === '' || $code === 'SITAPURA') {
+        $defaults = array_merge($defaults, $sitapuraDefaults);
+    }
+    if ($code === '') {
+        return $defaults;
+    }
+    $stmt = $conn->prepare('SELECT code, name, address, phone, email, website, cin_no, gst_no FROM sm_branch_locations WHERE code = ? LIMIT 1');
+    if (!$stmt) {
+        return $defaults;
+    }
+    $stmt->bind_param('s', $code);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$row) {
+        return $defaults;
+    }
+    foreach ($defaults as $key => $value) {
+        if (!isset($row[$key]) || trim((string) $row[$key]) === '') {
+            $row[$key] = $value;
+        }
+    }
+    return $row;
+}
+
 function user_branch_location_for_user($conn, $userId)
 {
     user_branch_location_ready($conn);
-    $stmt = $conn->prepare('SELECT branch_location, company_name FROM sm_users WHERE id = ? LIMIT 1');
+    $stmt = $conn->prepare('SELECT branch_location FROM sm_users WHERE id = ? LIMIT 1');
     if (!$stmt) {
         return '';
     }
@@ -148,12 +235,6 @@ function user_branch_location_for_user($conn, $userId)
     $branchLocation = user_branch_location_clean($row['branch_location'] ?? '', $conn);
     if ($branchLocation !== '') {
         return $branchLocation;
-    }
-    $companyName = strtoupper((string) ($row['company_name'] ?? ''));
-    foreach (user_branch_locations($conn, false) as $code => $label) {
-        if (strpos($companyName, $code) !== false || strpos($companyName, strtoupper($label)) !== false) {
-            return $code;
-        }
     }
     return '';
 }

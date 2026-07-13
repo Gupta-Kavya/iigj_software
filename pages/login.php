@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
     } else {
-        $stmt = $conn->prepare("SELECT id, full_name, email, password_hash, role, status FROM sm_users WHERE email = ? LIMIT 1");
+        $stmt = $conn->prepare("SELECT id, full_name, email, password_hash, role, status, branch_location FROM sm_users WHERE email = ? LIMIT 1");
         $stmt->bind_param('s', $email);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -35,12 +35,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Invalid email or password.';
         } elseif ($user['status'] !== 'active') {
             $error = 'Your account is not active. Please contact administrator.';
+        } elseif (empty(($ipStatus = auth_allowed_ip_status($conn, $user['branch_location'] ?? '', $user['role'] ?? ''))['allowed'])) {
+            $error = 'Access denied from this IP address (' . ($ipStatus['ip'] ?? '') . '). Contact super admin.';
         } else {
             session_regenerate_id(true);
             $_SESSION['user_id'] = (int) $user['id'];
             $_SESSION['user_name'] = $user['full_name'];
             $_SESSION['user_email'] = $user['email'];
             $_SESSION['user_role'] = $user['role'] ?: 'user';
+            $_SESSION['branch_location'] = $user['branch_location'] ?? '';
             unset($_SESSION['terms_version']);
 
             $termsStmt = @$conn->prepare('SELECT terms_version FROM sm_terms_acceptances WHERE user_id = ? AND terms_version = ? LIMIT 1');
@@ -77,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - SMARTLINK SOFT</title>
+    <title>Login - IIGJ RLC</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -86,50 +89,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <style>
         * { box-sizing: border-box; }
         body { background: #f7f7f8; color: #171717; font-family: "Inter", "Segoe UI", system-ui, sans-serif; min-height: 100vh; }
-        .auth-wrap { align-items: center; display: flex; min-height: 100vh; padding: 28px; }
-        .auth-shell { background: #fff; border: 1px solid #ececf1; border-radius: 16px; box-shadow: 0 18px 50px rgba(23,23,23,.08); display: grid; grid-template-columns: .9fr 1.1fr; margin: auto; max-width: 900px; min-height: 540px; overflow: hidden; width: 100%; }
-        .auth-intro { background: #171717; color: #fff; display: flex; flex-direction: column; justify-content: space-between; padding: 42px; }
-        .auth-brand { font-size: 20px; font-weight: 600; }
-        .auth-intro-copy h2 { font-size: 29px; font-weight: 600; line-height: 1.25; margin: 0 0 12px; }
-        .auth-intro-copy p { color: #bdbdbd; font-size: 14px; line-height: 1.7; margin: 0; }
-        .auth-points { color: #d4d4d4; font-size: 12px; line-height: 1.8; margin-top: 22px; }
-        .auth-points i { color: #fff; margin-right: 7px; }
-        .auth-form-pane { align-items: center; display: flex; padding: 48px 54px; }
-        .auth-card { margin: auto; max-width: 390px; width: 100%; }
-        .auth-card h1 { color: #171717; font-size: 25px; font-weight: 600; margin: 0 0 7px; }
-        .auth-card > p { color: #737373; font-size: 13px; margin-bottom: 26px; }
-        .form-group label { color: #404040; font-size: 12px; font-weight: 600; margin-bottom: 7px; }
+        .auth-wrap { align-items: center; display: flex; min-height: 100vh; padding: 18px; }
+        .auth-shell { background: #fff; border: 1px solid #ececf1; border-radius: 12px; box-shadow: 0 14px 36px rgba(23,23,23,.08); margin: auto; max-width: 390px; min-height: 410px; overflow: hidden; width: 100%; }
+        .auth-form-pane { align-items: center; display: flex; min-height: 410px; padding: 30px 36px; }
+        .auth-card { margin: auto; max-width: 318px; width: 100%; }
+        .auth-logo { display: block; height: 54px; margin: 0 auto 17px; object-fit: contain; width: 128px; }
+        .auth-card h1 { color: #171717; font-size: 21px; font-weight: 600; margin: 0 0 5px; }
+        .auth-card > p { color: #737373; font-size: 12px; margin-bottom: 18px; text-align: center; }
+        .form-group { margin-bottom: 13px; }
+        .form-group label { color: #404040; font-size: 11px; font-weight: 600; margin-bottom: 5px; }
         .input-wrap { position: relative; }
-        .input-wrap > i { color: #a3a3a3; left: 14px; position: absolute; top: 15px; }
-        .form-control { border: 1px solid #e5e5e5; border-radius: 9px; box-shadow: none; height: 46px; padding-left: 40px; }
+        .input-wrap > i { color: #a3a3a3; font-size: 12px; left: 12px; position: absolute; top: 12px; }
+        .form-control { border: 1px solid #e5e5e5; border-radius: 7px; box-shadow: none; font-size: 13px; height: 38px; padding-left: 34px; }
         .form-control:focus { border-color: #a3a3a3; box-shadow: 0 0 0 3px rgba(23,23,23,.06); }
-        .btn-auth { background: #171717; border: 0; border-radius: 9px; color: #fff; font-weight: 500; height: 46px; margin-top: 5px; width: 100%; }
+        .btn-auth { background: #171717; border: 0; border-radius: 7px; color: #fff; font-size: 13px; font-weight: 500; height: 38px; margin-top: 3px; width: 100%; }
         .btn-auth:hover, .btn-auth:focus { background: #404040; color: #fff; }
-        .auth-link { color: #737373; font-size: 13px; margin-top: 21px; text-align: center; }
-        .auth-link a { color: #171717; font-weight: 600; }
-        .alert { border-radius: 9px; font-size: 13px; }
-        @media(max-width:760px){.auth-wrap{padding:16px}.auth-shell{display:block;max-width:480px}.auth-intro{display:none}.auth-form-pane{min-height:580px;padding:34px 28px}}
+        .alert { border-radius: 7px; font-size: 12px; padding: 9px 11px; }
+        @media(max-width:760px){.auth-wrap{padding:14px}.auth-shell{max-width:390px}.auth-form-pane{min-height:410px;padding:28px 24px}}
     </style>
 </head>
 <body>
 <div class="auth-wrap">
     <div class="auth-shell">
-        <section class="auth-intro">
-            <div class="auth-brand"><i class="fa fa-diamond"></i> SMARTLINK SOFT</div>
-            <div class="auth-intro-copy">
-                <h2>Certificate operations, organized.</h2>
-                <p>Manage laboratory records, card layouts, report generation, images and verification access from one workspace.</p>
-                <div class="auth-points">
-                    <div><i class="fa fa-check"></i> Private data for each account</div>
-                    <div><i class="fa fa-check"></i> Custom ATM and A4 certificate layouts</div>
-                    <div><i class="fa fa-check"></i> Controlled verification API access</div>
-                </div>
-            </div>
-            <small style="color:#737373">Authorized laboratory use only</small>
-        </section>
         <section class="auth-form-pane">
             <div class="auth-card">
-                <h1>Welcome back</h1>
+                <img class="auth-logo" src="assets/agreement-gjepc.svg" alt="GJEPC">
+                <h1 style="text-align:center">Welcome back</h1>
                 <p>Enter your account details to continue.</p>
                 <?php if ($error): ?><div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
                 <form method="post">
@@ -144,7 +129,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <button type="submit" class="btn btn-auth">Sign in <i class="fa fa-arrow-right" style="margin-left:6px"></i></button>
                 </form>
-                <div class="auth-link">New here? <a href="signup.php">Create an account</a></div>
             </div>
         </section>
     </div>
