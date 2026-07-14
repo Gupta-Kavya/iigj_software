@@ -418,31 +418,65 @@ function atm_table_has_column($conn, $table, $column)
     return $result && $result->num_rows > 0;
 }
 
+function atm_certificate_branch_location($conn, $userId)
+{
+    if (!$conn || !function_exists('user_branch_location_for_user')) {
+        return '';
+    }
+    return user_branch_location_for_user($conn, $userId);
+}
+
+function atm_form_data_certificate_scope_sql($conn, $userId)
+{
+    $branchLocation = atm_certificate_branch_location($conn, $userId);
+    if ($branchLocation !== '' && atm_table_has_column($conn, 'sm_form_data', 'location')) {
+        return "`location` = '" . $conn->real_escape_string($branchLocation) . "'";
+    }
+    if (atm_table_has_column($conn, 'sm_form_data', 'user_id')) {
+        return user_branch_scope_sql($conn, $userId, 'user_id');
+    }
+    return '1=1';
+}
+
+function atm_form_masters_certificate_scope($conn, $userId)
+{
+    $branchLocation = atm_certificate_branch_location($conn, $userId);
+    if (
+        $branchLocation !== ''
+        && atm_table_has_column($conn, 'sm_form_masters', 'agreement_id')
+        && atm_table_has_column($conn, 'sm_stone_agreements', 'agreement_branch_location')
+    ) {
+        return [
+            'join' => 'INNER JOIN sm_stone_agreements a ON a.id = m.agreement_id',
+            'where' => "a.agreement_branch_location = '" . $conn->real_escape_string($branchLocation) . "'",
+        ];
+    }
+    if (atm_table_has_column($conn, 'sm_form_masters', 'user_id')) {
+        return [
+            'join' => '',
+            'where' => user_branch_scope_sql($conn, $userId, 'user_id'),
+        ];
+    }
+    return [
+        'join' => '',
+        'where' => '1=1',
+    ];
+}
+
 function atm_last_certificate_number($conn, $userId)
 {
     $last = 0;
-    $scopeSql = user_branch_scope_sql($conn, $userId, 'user_id');
     if (atm_table_has_column($conn, 'sm_form_data', 'certi_no')) {
-        if (atm_table_has_column($conn, 'sm_form_data', 'user_id')) {
-            $result = @$conn->query("SELECT MAX(certi_no) AS last_certi_no FROM sm_form_data WHERE {$scopeSql}");
-            $row = $result ? $result->fetch_assoc() : null;
-            $last = max($last, (int) ($row['last_certi_no'] ?? 0));
-        } else {
-            $result = @$conn->query('SELECT MAX(certi_no) AS last_certi_no FROM sm_form_data');
-            $row = $result ? $result->fetch_assoc() : null;
-            $last = max($last, (int) ($row['last_certi_no'] ?? 0));
-        }
+        $scopeSql = atm_form_data_certificate_scope_sql($conn, $userId);
+        $result = @$conn->query("SELECT MAX(certi_no) AS last_certi_no FROM sm_form_data WHERE {$scopeSql}");
+        $row = $result ? $result->fetch_assoc() : null;
+        $last = max($last, (int) ($row['last_certi_no'] ?? 0));
     }
     if (atm_table_has_column($conn, 'sm_form_masters', 'certi_no')) {
-        if (atm_table_has_column($conn, 'sm_form_masters', 'user_id')) {
-            $result = @$conn->query("SELECT MAX(certi_no) AS last_certi_no FROM sm_form_masters WHERE {$scopeSql}");
-            $row = $result ? $result->fetch_assoc() : null;
-            $last = max($last, (int) ($row['last_certi_no'] ?? 0));
-        } else {
-            $result = @$conn->query('SELECT MAX(certi_no) AS last_certi_no FROM sm_form_masters');
-            $row = $result ? $result->fetch_assoc() : null;
-            $last = max($last, (int) ($row['last_certi_no'] ?? 0));
-        }
+        $scope = atm_form_masters_certificate_scope($conn, $userId);
+        $result = @$conn->query("SELECT MAX(m.certi_no) AS last_certi_no FROM sm_form_masters m {$scope['join']} WHERE {$scope['where']}");
+        $row = $result ? $result->fetch_assoc() : null;
+        $last = max($last, (int) ($row['last_certi_no'] ?? 0));
     }
     return $last;
 }
@@ -836,7 +870,8 @@ function atm_ensure_numbering_settings_table($conn)
 function atm_user_has_certificates($conn, $userId)
 {
     if (!atm_table_has_column($conn, 'sm_form_data', 'user_id')) {
-        $result = @$conn->query('SELECT COUNT(*) AS total FROM sm_form_data');
+        $scopeSql = atm_form_data_certificate_scope_sql($conn, $userId);
+        $result = @$conn->query("SELECT COUNT(*) AS total FROM sm_form_data WHERE {$scopeSql}");
         $row = $result ? $result->fetch_assoc() : null;
         return ((int) ($row['total'] ?? 0)) > 0;
     }

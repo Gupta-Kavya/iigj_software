@@ -51,7 +51,7 @@ if ($fromDate > $toDate) {
     [$fromDate, $toDate] = [$toDate, $fromDate];
 }
 $reportMode = strtolower((string) ($_GET['report_type'] ?? 'summary'));
-$reportMode = in_array($reportMode, ['summary', 'detailed', 'due', 'cancel'], true) ? $reportMode : 'summary';
+$reportMode = in_array($reportMode, ['summary', 'detailed', 'due', 'cancel', 'collection_center', 'daily_log', 'pending_delivery', 'received_vs_generated', 'user_wise'], true) ? $reportMode : 'summary';
 
 $userId = auth_current_user_id();
 $branchLocation = user_branch_location_for_user($conn, $userId);
@@ -171,11 +171,185 @@ foreach ($agreements as $agreement) {
     }
 }
 
+$agreementIds = array_values(array_filter(array_map(function ($agreement) {
+    return (int) ($agreement['id'] ?? 0);
+}, $agreements)));
+$masterStatsByAgreement = [];
+if ($agreementIds) {
+    $idsSql = implode(',', array_map('intval', $agreementIds));
+    $masterResult = @$conn->query("SELECT agreement_id,
+            COUNT(*) AS booked_certificates,
+            SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) AS generated_certificates,
+            SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_certificates,
+            COALESCE(SUM(CASE WHEN status <> 'cancelled' THEN pcs ELSE 0 END), 0) AS booked_pcs,
+            COALESCE(SUM(CASE WHEN status = 'generated' THEN pcs ELSE 0 END), 0) AS generated_pcs,
+            COALESCE(SUM(CASE WHEN status = 'booked' THEN pcs ELSE 0 END), 0) AS pending_pcs,
+            COALESCE(SUM(CASE WHEN status = 'cancelled' THEN pcs ELSE 0 END), 0) AS cancelled_pcs
+        FROM sm_form_masters
+        WHERE agreement_id IN ({$idsSql})
+        GROUP BY agreement_id");
+    if ($masterResult) {
+        while ($row = $masterResult->fetch_assoc()) {
+            $masterStatsByAgreement[(int) ($row['agreement_id'] ?? 0)] = $row;
+        }
+    }
+}
+
+$collectionCenterRows = [];
+$dailyLogRows = [];
+$dailyLogEntries = [];
+$pendingDeliveryRows = [];
+$receivedGeneratedRows = [];
+$userWiseRows = [];
+foreach ($agreements as $agreement) {
+    $activePcs = 0;
+    $cancelledPcs = 0;
+    $activeAmount = 0.0;
+    foreach ($agreement['_items'] as $item) {
+        $isCancelled = strtolower(trim((string) ($item['row_status'] ?? 'active'))) === 'cancelled';
+        if ($isCancelled) {
+            $cancelledPcs += (int) ($item['pcs'] ?? 0);
+            continue;
+        }
+        $activePcs += (int) ($item['pcs'] ?? 0);
+        $activeAmount += (float) ($item['amount'] ?? 0);
+    }
+    $paidAmount = (float) ($agreement['payment_cash'] ?? 0)
+        + (float) ($agreement['payment_cheque'] ?? 0)
+        + (float) ($agreement['payment_neft'] ?? 0)
+        + (float) ($agreement['payment_card'] ?? 0)
+        + (float) ($agreement['payment_tds'] ?? 0);
+    $masterStats = $masterStatsByAgreement[(int) ($agreement['id'] ?? 0)] ?? [];
+
+    $staffId = (int) ($agreement['user_id'] ?? 0);
+    $staffKey = $staffId > 0 ? (string) $staffId : 'unknown';
+    if (!isset($userWiseRows[$staffKey])) {
+        $userWiseRows[$staffKey] = [
+            'staff' => trim((string) ($agreement['full_name'] ?? '')) ?: 'Unknown User',
+            'branch' => user_branch_location_label($conn, $agreement['branch_location'] ?? ($agreement['agreement_branch_location'] ?? $branchLocation)),
+            'agreements' => 0,
+            'stones' => 0,
+            'cancelled' => 0,
+            'amount' => 0.0,
+            'paid' => 0.0,
+            'due' => 0.0,
+            'generated_certificates' => 0,
+            'pending_pcs' => 0,
+            'agreement_nos' => [],
+        ];
+    }
+    $userWiseRows[$staffKey]['agreements']++;
+    $agreementNo = trim((string) ($agreement['agreement_no'] ?? ''));
+    if ($agreementNo !== '') {
+        $userWiseRows[$staffKey]['agreement_nos'][] = $agreementNo;
+    }
+    $userWiseRows[$staffKey]['stones'] += $activePcs;
+    $userWiseRows[$staffKey]['cancelled'] += $cancelledPcs;
+    $userWiseRows[$staffKey]['amount'] += $activeAmount;
+    $userWiseRows[$staffKey]['paid'] += $paidAmount;
+    $userWiseRows[$staffKey]['due'] += (float) ($agreement['due_amount'] ?? 0);
+    $userWiseRows[$staffKey]['generated_certificates'] += (int) ($masterStats['generated_certificates'] ?? 0);
+    $userWiseRows[$staffKey]['pending_pcs'] += max(0, (int) ($masterStats['booked_pcs'] ?? $activePcs) - (int) ($masterStats['generated_pcs'] ?? 0));
+
+    $centerCode = trim((string) ($agreement['collection_center_code'] ?? ''));
+    $centerName = trim((string) ($agreement['collection_center_name'] ?? ''));
+    $centerKey = $centerCode !== '' ? $centerCode : ($centerName !== '' ? strtoupper($centerName) : 'BRANCH');
+    if (!isset($collectionCenterRows[$centerKey])) {
+        $collectionCenterRows[$centerKey] = [
+            'code' => $centerCode,
+            'name' => $centerName !== '' ? $centerName : user_branch_location_label($conn, $agreement['agreement_branch_location'] ?? $branchLocation),
+            'agreements' => 0,
+            'stones' => 0,
+            'cancelled' => 0,
+            'amount' => 0.0,
+            'paid' => 0.0,
+            'due' => 0.0,
+        ];
+    }
+    $collectionCenterRows[$centerKey]['agreements']++;
+    $collectionCenterRows[$centerKey]['stones'] += $activePcs;
+    $collectionCenterRows[$centerKey]['cancelled'] += $cancelledPcs;
+    $collectionCenterRows[$centerKey]['amount'] += $activeAmount;
+    $collectionCenterRows[$centerKey]['paid'] += $paidAmount;
+    $collectionCenterRows[$centerKey]['due'] += (float) ($agreement['due_amount'] ?? 0);
+
+    $dayKey = (string) ($agreement['agreement_date'] ?? '');
+    if (!isset($dailyLogRows[$dayKey])) {
+        $dailyLogRows[$dayKey] = [
+            'date' => $dayKey,
+            'agreements' => 0,
+            'stones' => 0,
+            'cancelled' => 0,
+            'amount' => 0.0,
+            'cash' => 0.0,
+            'cheque' => 0.0,
+            'neft' => 0.0,
+            'card' => 0.0,
+            'tds' => 0.0,
+            'due' => 0.0,
+            'refund' => 0.0,
+        ];
+    }
+    $dailyLogRows[$dayKey]['agreements']++;
+    $dailyLogRows[$dayKey]['stones'] += $activePcs;
+    $dailyLogRows[$dayKey]['cancelled'] += $cancelledPcs;
+    $dailyLogRows[$dayKey]['amount'] += $activeAmount;
+    $dailyLogRows[$dayKey]['cash'] += (float) ($agreement['payment_cash'] ?? 0);
+    $dailyLogRows[$dayKey]['cheque'] += (float) ($agreement['payment_cheque'] ?? 0);
+    $dailyLogRows[$dayKey]['neft'] += (float) ($agreement['payment_neft'] ?? 0);
+    $dailyLogRows[$dayKey]['card'] += (float) ($agreement['payment_card'] ?? 0);
+    $dailyLogRows[$dayKey]['tds'] += (float) ($agreement['payment_tds'] ?? 0);
+    $dailyLogRows[$dayKey]['due'] += (float) ($agreement['due_amount'] ?? 0);
+    $dailyLogRows[$dayKey]['refund'] += (float) ($agreement['refund_amount'] ?? 0);
+    $dailyLogEntries[] = [
+        'agreement' => $agreement,
+        'stones' => $activePcs,
+        'cancelled' => $cancelledPcs,
+        'amount' => $activeAmount,
+        'paid' => $paidAmount,
+    ];
+
+    $status = agreement_status_clean($agreement['agreement_status'] ?? 'IN_PROCESS');
+    if ((int) ($agreement['delivered'] ?? 0) !== 1 && !in_array($status, ['DELIVERED', 'CANCELLED'], true)) {
+        $pendingDeliveryRows[] = [
+            'agreement' => $agreement,
+            'stones' => $activePcs,
+            'amount' => $activeAmount,
+            'paid' => $paidAmount,
+        ];
+    }
+
+    $generatedPcs = (int) ($masterStats['generated_pcs'] ?? 0);
+    $bookedPcs = (int) ($masterStats['booked_pcs'] ?? $activePcs);
+    $receivedGeneratedRows[] = [
+        'agreement' => $agreement,
+        'received_pcs' => $activePcs,
+        'booked_pcs' => $bookedPcs,
+        'generated_pcs' => $generatedPcs,
+        'pending_pcs' => max(0, $bookedPcs - $generatedPcs),
+        'cancelled_pcs' => (int) ($masterStats['cancelled_pcs'] ?? $cancelledPcs),
+        'booked_certificates' => (int) ($masterStats['booked_certificates'] ?? 0),
+        'generated_certificates' => (int) ($masterStats['generated_certificates'] ?? 0),
+    ];
+}
+ksort($dailyLogRows);
+uasort($collectionCenterRows, function ($a, $b) {
+    return strcasecmp((string) $a['name'], (string) $b['name']);
+});
+uasort($userWiseRows, function ($a, $b) {
+    return strcasecmp((string) $a['staff'], (string) $b['staff']);
+});
+
 $reportTitles = [
     'summary' => 'Total Collection Report',
     'detailed' => 'Total Collection Report',
     'due' => 'Due Report',
     'cancel' => 'Cancel Report',
+    'collection_center' => 'Collection Center-Wise Report',
+    'daily_log' => 'Daily Log Book',
+    'pending_delivery' => 'Pending Delivery Report',
+    'received_vs_generated' => 'Stone Received vs Report Generated',
+    'user_wise' => 'User-Wise Entry Report',
 ];
 
 if (strtolower((string) ($_GET['export'] ?? '')) === 'excel') {
@@ -265,6 +439,97 @@ if (strtolower((string) ($_GET['export'] ?? '')) === 'excel') {
             ]);
         }
         fputcsv($out, ['', '', '', '', '', 'Total Cancelled', (int) $cancelPcsTotal, agreement_report_money($cancelTotal), '']);
+    } elseif ($reportMode === 'collection_center') {
+        fputcsv($out, ['Collection Center', 'Code', 'Agreements', 'Stones', 'Cancelled Pcs', 'Amount', 'Paid', 'Due']);
+        foreach ($collectionCenterRows as $row) {
+            fputcsv($out, [
+                $row['name'] ?? '',
+                $row['code'] ?? '',
+                (int) ($row['agreements'] ?? 0),
+                (int) ($row['stones'] ?? 0),
+                (int) ($row['cancelled'] ?? 0),
+                agreement_report_money($row['amount'] ?? 0),
+                agreement_report_money($row['paid'] ?? 0),
+                agreement_report_money($row['due'] ?? 0),
+            ]);
+        }
+    } elseif ($reportMode === 'daily_log') {
+        fputcsv($out, ['Date', 'Time', 'Agreement No', 'Customer', 'Collection Center', 'Stones', 'Cancelled Pcs', 'Amount', 'Paid', 'Due', 'Expected Delivery', 'Prepared By', 'Status']);
+        foreach ($dailyLogEntries as $row) {
+            $agreement = $row['agreement'];
+            $deliveryText = trim(agreement_report_date($agreement['delivery_date'] ?? '') . ' ' . (string) ($agreement['delivery_time'] ?? ''));
+            $centerText = trim((string) ($agreement['collection_center_name'] ?? ''));
+            if ($centerText === '') {
+                $centerText = user_branch_location_label($conn, $agreement['agreement_branch_location'] ?? $branchLocation);
+            }
+            fputcsv($out, [
+                agreement_report_date($agreement['agreement_date'] ?? ''),
+                $agreement['agreement_time'] ?? '',
+                $agreement['agreement_no'] ?? '',
+                $agreement['customer_name'] ?? '',
+                $centerText,
+                (int) ($row['stones'] ?? 0),
+                (int) ($row['cancelled'] ?? 0),
+                agreement_report_money($row['amount'] ?? 0),
+                agreement_report_money($row['paid'] ?? 0),
+                agreement_report_money($agreement['due_amount'] ?? 0),
+                $deliveryText,
+                $agreement['prepared_by'] ?? '',
+                agreement_status_label($agreement['agreement_status'] ?? 'IN_PROCESS'),
+            ]);
+        }
+    } elseif ($reportMode === 'pending_delivery') {
+        fputcsv($out, ['Agreement No', 'Agreement Date', 'Expected Delivery', 'Customer', 'Mobile No.', 'Stones', 'Amount', 'Due', 'Status']);
+        foreach ($pendingDeliveryRows as $row) {
+            $agreement = $row['agreement'];
+            $deliveryText = trim(agreement_report_date($agreement['delivery_date'] ?? '') . ' ' . (string) ($agreement['delivery_time'] ?? ''));
+            fputcsv($out, [
+                $agreement['agreement_no'] ?? '',
+                agreement_report_date($agreement['agreement_date'] ?? ''),
+                $deliveryText,
+                $agreement['customer_name'] ?? '',
+                $agreement['mobile_no'] ?? '',
+                (int) ($row['stones'] ?? 0),
+                agreement_report_money($row['amount'] ?? 0),
+                agreement_report_money($agreement['due_amount'] ?? 0),
+                agreement_status_label($agreement['agreement_status'] ?? 'IN_PROCESS'),
+            ]);
+        }
+    } elseif ($reportMode === 'received_vs_generated') {
+        fputcsv($out, ['Agreement No', 'Date', 'Customer', 'Received Pcs', 'Booked Pcs', 'Generated Pcs', 'Pending Pcs', 'Cancelled Pcs', 'Booked Certs', 'Generated Certs', 'Status']);
+        foreach ($receivedGeneratedRows as $row) {
+            $agreement = $row['agreement'];
+            fputcsv($out, [
+                $agreement['agreement_no'] ?? '',
+                agreement_report_date($agreement['agreement_date'] ?? ''),
+                $agreement['customer_name'] ?? '',
+                (int) ($row['received_pcs'] ?? 0),
+                (int) ($row['booked_pcs'] ?? 0),
+                (int) ($row['generated_pcs'] ?? 0),
+                (int) ($row['pending_pcs'] ?? 0),
+                (int) ($row['cancelled_pcs'] ?? 0),
+                (int) ($row['booked_certificates'] ?? 0),
+                (int) ($row['generated_certificates'] ?? 0),
+                agreement_status_label($agreement['agreement_status'] ?? 'IN_PROCESS'),
+            ]);
+        }
+    } elseif ($reportMode === 'user_wise') {
+        fputcsv($out, ['User', 'Branch', 'Agreement Nos', 'Agreements', 'Stones', 'Cancelled Pcs', 'Generated Certs', 'Pending Pcs', 'Amount', 'Paid', 'Due']);
+        foreach ($userWiseRows as $row) {
+            fputcsv($out, [
+                $row['staff'] ?? '',
+                $row['branch'] ?? '',
+                implode(', ', $row['agreement_nos'] ?? []),
+                (int) ($row['agreements'] ?? 0),
+                (int) ($row['stones'] ?? 0),
+                (int) ($row['cancelled'] ?? 0),
+                (int) ($row['generated_certificates'] ?? 0),
+                (int) ($row['pending_pcs'] ?? 0),
+                agreement_report_money($row['amount'] ?? 0),
+                agreement_report_money($row['paid'] ?? 0),
+                agreement_report_money($row['due'] ?? 0),
+            ]);
+        }
     } else {
         fputcsv($out, ['Date', 'Ref.No', 'Category', 'Size', 'Nor/Urgent', 'Gross_wt', 'Stone_wt', 'Dia_Wt', 'Bead-Lnth', 'Pcs', 'Amount', 'Cancel']);
         foreach ($agreements as $agreement) {
@@ -343,7 +608,7 @@ $exportUrl = 'agreement-reports.php?' . http_build_query($exportParams);
         border-radius: 8px;
         display: grid;
         gap: 10px;
-        grid-template-columns: 150px 150px 170px auto;
+        grid-template-columns: 150px 150px minmax(260px, 1fr) auto;
         margin-bottom: 14px;
         padding: 12px;
     }
@@ -493,6 +758,11 @@ $exportUrl = 'agreement-reports.php?' . http_build_query($exportParams);
         border-bottom: 0;
         font-size: 10px;
         padding: 4px 5px;
+    }
+    .compact-report-table th,
+    .compact-report-table td {
+        font-size: 10.5px;
+        padding: 4px 4px;
     }
     .detail-table thead th {
         border-bottom: 1px solid #222;
@@ -760,6 +1030,11 @@ $exportUrl = 'agreement-reports.php?' . http_build_query($exportParams);
                     <option value="detailed" <?php echo $reportMode === 'detailed' ? 'selected' : ''; ?>>Detailed Report</option>
                     <option value="due" <?php echo $reportMode === 'due' ? 'selected' : ''; ?>>Due Report</option>
                     <option value="cancel" <?php echo $reportMode === 'cancel' ? 'selected' : ''; ?>>Cancel Report</option>
+                    <option value="collection_center" <?php echo $reportMode === 'collection_center' ? 'selected' : ''; ?>>Collection Center-Wise Report</option>
+                    <option value="daily_log" <?php echo $reportMode === 'daily_log' ? 'selected' : ''; ?>>Daily Log Book</option>
+                    <option value="pending_delivery" <?php echo $reportMode === 'pending_delivery' ? 'selected' : ''; ?>>Pending Delivery Report</option>
+                    <option value="received_vs_generated" <?php echo $reportMode === 'received_vs_generated' ? 'selected' : ''; ?>>Stone Received vs Report Generated</option>
+                    <option value="user_wise" <?php echo $reportMode === 'user_wise' ? 'selected' : ''; ?>>User-Wise Entry Report</option>
                 </select>
             </div>
             <div>
@@ -935,6 +1210,221 @@ $exportUrl = 'agreement-reports.php?' . http_build_query($exportParams);
                 </table>
                 <?php if (!$cancelRows): ?>
                     <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No cancelled entries found in this date range.</div>
+                <?php endif; ?>
+            <?php elseif ($reportMode === 'collection_center'): ?>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>Collection Center</th>
+                            <th>Code</th>
+                            <th class="num">Agreements</th>
+                            <th class="num">Stones</th>
+                            <th class="num">Cancelled</th>
+                            <th class="num">Amount</th>
+                            <th class="num">Paid</th>
+                            <th class="num">Due</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($collectionCenterRows as $row): ?>
+                            <tr>
+                                <td><?php echo agreement_report_h($row['name'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['code'] ?? ''); ?></td>
+                                <td class="num"><?php echo (int) ($row['agreements'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['stones'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['cancelled'] ?? 0); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['amount'] ?? 0)); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['paid'] ?? 0)); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['due'] ?? 0)); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php if (!$collectionCenterRows): ?>
+                    <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No collection center data found in this date range.</div>
+                <?php endif; ?>
+            <?php elseif ($reportMode === 'daily_log'): ?>
+                <table class="report-table compact-report-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Agreement No</th>
+                            <th>Customer</th>
+                            <th>Collection Center</th>
+                            <th class="num">Stones</th>
+                            <th class="num">Cancelled</th>
+                            <th class="num">Amount</th>
+                            <th class="num">Paid</th>
+                            <th class="num">Due</th>
+                            <th>Delivery</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($dailyLogEntries as $row): ?>
+                            <?php
+                            $agreement = $row['agreement'];
+                            $deliveryText = trim(agreement_report_date($agreement['delivery_date'] ?? '') . ' ' . (string) ($agreement['delivery_time'] ?? ''));
+                            $centerText = trim((string) ($agreement['collection_center_name'] ?? ''));
+                            if ($centerText === '') {
+                                $centerText = user_branch_location_label($conn, $agreement['agreement_branch_location'] ?? $branchLocation);
+                            }
+                            ?>
+                            <tr>
+                                <td><?php echo agreement_report_h(agreement_report_date($agreement['agreement_date'] ?? '')); ?></td>
+                                <td><?php echo agreement_report_h($agreement['agreement_time'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($agreement['agreement_no'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($agreement['customer_name'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($centerText); ?></td>
+                                <td class="num"><?php echo (int) ($row['stones'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['cancelled'] ?? 0); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['amount'] ?? 0)); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['paid'] ?? 0)); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($agreement['due_amount'] ?? 0)); ?></td>
+                                <td><?php echo agreement_report_h($deliveryText); ?></td>
+                                <td><?php echo agreement_report_h(agreement_status_label($agreement['agreement_status'] ?? 'IN_PROCESS')); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <tr class="agreement-total">
+                            <td colspan="5" class="num">Total</td>
+                            <td class="num"><?php echo (int) $summary['stones']; ?></td>
+                            <td class="num"><?php echo (int) $summary['cancel']; ?></td>
+                            <td class="num"><?php echo agreement_report_h(agreement_report_money($summary['amount'])); ?></td>
+                            <td class="num"><?php echo agreement_report_h(agreement_report_money($summary['cash'] + $summary['cheque'] + $summary['neft'] + $summary['card'] + $summary['tds'])); ?></td>
+                            <td class="num"><?php echo agreement_report_h(agreement_report_money($summary['due'])); ?></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php if (!$dailyLogEntries): ?>
+                    <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No daily log entries found in this date range.</div>
+                <?php endif; ?>
+            <?php elseif ($reportMode === 'pending_delivery'): ?>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>Agreement No</th>
+                            <th>Agreement Date</th>
+                            <th>Expected Delivery</th>
+                            <th>Customer</th>
+                            <th>Mobile No.</th>
+                            <th class="num">Stones</th>
+                            <th class="num">Amount</th>
+                            <th class="num">Due</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pendingDeliveryRows as $row): ?>
+                            <?php
+                            $agreement = $row['agreement'];
+                            $deliveryText = trim(agreement_report_date($agreement['delivery_date'] ?? '') . ' ' . (string) ($agreement['delivery_time'] ?? ''));
+                            ?>
+                            <tr>
+                                <td><?php echo agreement_report_h($agreement['agreement_no'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h(agreement_report_date($agreement['agreement_date'] ?? '')); ?></td>
+                                <td><?php echo agreement_report_h($deliveryText); ?></td>
+                                <td><?php echo agreement_report_h($agreement['customer_name'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($agreement['mobile_no'] ?? ''); ?></td>
+                                <td class="num"><?php echo (int) ($row['stones'] ?? 0); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['amount'] ?? 0)); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($agreement['due_amount'] ?? 0)); ?></td>
+                                <td><?php echo agreement_report_h(agreement_status_label($agreement['agreement_status'] ?? 'IN_PROCESS')); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php if (!$pendingDeliveryRows): ?>
+                    <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No pending deliveries found in this date range.</div>
+                <?php endif; ?>
+            <?php elseif ($reportMode === 'received_vs_generated'): ?>
+                <table class="report-table compact-report-table">
+                    <thead>
+                        <tr>
+                            <th>Agreement No</th>
+                            <th>Date</th>
+                            <th>Customer</th>
+                            <th class="num">Received Pcs</th>
+                            <th class="num">Booked Pcs</th>
+                            <th class="num">Generated Pcs</th>
+                            <th class="num">Pending Pcs</th>
+                            <th class="num">Cancelled Pcs</th>
+                            <th class="num">Booked Certs</th>
+                            <th class="num">Generated Certs</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($receivedGeneratedRows as $row): ?>
+                            <?php $agreement = $row['agreement']; ?>
+                            <tr>
+                                <td><?php echo agreement_report_h($agreement['agreement_no'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h(agreement_report_date($agreement['agreement_date'] ?? '')); ?></td>
+                                <td><?php echo agreement_report_h($agreement['customer_name'] ?? ''); ?></td>
+                                <td class="num"><?php echo (int) ($row['received_pcs'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['booked_pcs'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['generated_pcs'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['pending_pcs'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['cancelled_pcs'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['booked_certificates'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['generated_certificates'] ?? 0); ?></td>
+                                <td><?php echo agreement_report_h(agreement_status_label($agreement['agreement_status'] ?? 'IN_PROCESS')); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php if (!$receivedGeneratedRows): ?>
+                    <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No received/generated data found in this date range.</div>
+                <?php endif; ?>
+            <?php elseif ($reportMode === 'user_wise'): ?>
+                <table class="report-table compact-report-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Branch</th>
+                            <th>Agreement Nos</th>
+                            <th class="num">Agreements</th>
+                            <th class="num">Stones</th>
+                            <th class="num">Cancelled</th>
+                            <th class="num">Generated Certs</th>
+                            <th class="num">Pending Pcs</th>
+                            <th class="num">Amount</th>
+                            <th class="num">Paid</th>
+                            <th class="num">Due</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($userWiseRows as $row): ?>
+                            <tr>
+                                <td><?php echo agreement_report_h($row['staff'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['branch'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h(implode(', ', $row['agreement_nos'] ?? [])); ?></td>
+                                <td class="num"><?php echo (int) ($row['agreements'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['stones'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['cancelled'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['generated_certificates'] ?? 0); ?></td>
+                                <td class="num"><?php echo (int) ($row['pending_pcs'] ?? 0); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['amount'] ?? 0)); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['paid'] ?? 0)); ?></td>
+                                <td class="num"><?php echo agreement_report_h(agreement_report_money($row['due'] ?? 0)); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <tr class="agreement-total">
+                            <td colspan="3" class="num">Total</td>
+                            <td class="num"><?php echo (int) count($agreements); ?></td>
+                            <td class="num"><?php echo (int) $summary['stones']; ?></td>
+                            <td class="num"><?php echo (int) $summary['cancel']; ?></td>
+                            <td class="num"><?php echo (int) array_sum(array_map(function ($row) { return (int) ($row['generated_certificates'] ?? 0); }, $userWiseRows)); ?></td>
+                            <td class="num"><?php echo (int) array_sum(array_map(function ($row) { return (int) ($row['pending_pcs'] ?? 0); }, $userWiseRows)); ?></td>
+                            <td class="num"><?php echo agreement_report_h(agreement_report_money($summary['amount'])); ?></td>
+                            <td class="num"><?php echo agreement_report_h(agreement_report_money($summary['cash'] + $summary['cheque'] + $summary['neft'] + $summary['card'] + $summary['tds'])); ?></td>
+                            <td class="num"><?php echo agreement_report_h(agreement_report_money($summary['due'])); ?></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php if (!$userWiseRows): ?>
+                    <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No user-wise entries found in this date range.</div>
                 <?php endif; ?>
             <?php else: ?>
                 <table class="report-table detail-table">

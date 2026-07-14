@@ -175,7 +175,8 @@ $upload_token = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($_POST['upload_to
 $upload_token = $upload_token !== '' ? substr($upload_token, 0, 80) : '';
 $user_id = auth_current_user_id();
 
-$lockName = 'sm_form_data_certi_no_user_' . $user_id;
+$lockBranch = function_exists('user_branch_storage_code') ? user_branch_storage_code($conn, $user_id) : ('user_' . $user_id);
+$lockName = 'sm_form_data_certi_no_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $lockBranch);
 $lockStmt = $conn->prepare('SELECT GET_LOCK(?, 10) AS lock_status');
 $lockStmt->bind_param('s', $lockName);
 $lockStmt->execute();

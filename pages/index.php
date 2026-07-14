@@ -12,8 +12,21 @@ $monthEnd = date('Y-m-t');
 $dailyStart = date('Y-m-d', strtotime('-13 days'));
 $monthlyStart = date('Y-m-01', strtotime('-5 months'));
 $dateExpr = "COALESCE(NULLIF(DATE(`date`), '0000-00-00'), DATE(STR_TO_DATE(`date`, '%Y-%m-%d')), DATE(STR_TO_DATE(`date`, '%d-%m-%Y')), DATE(STR_TO_DATE(`date`, '%d/%m/%Y')), DATE(STR_TO_DATE(`date`, '%d.%m.%Y')), DATE(STR_TO_DATE(`date`, '%m/%d/%Y')))";
-$branchScopeSql = user_branch_location_scope_sql($conn, $userId, 'location');
+$dashboardBranchLocation = user_branch_location_for_user($conn, $userId);
+$branchScopeSql = $dashboardBranchLocation !== ''
+    ? "`location` = '" . $conn->real_escape_string($dashboardBranchLocation) . "'"
+    : user_branch_location_scope_sql($conn, $userId, 'location');
 agreement_table_ready($conn);
+
+function dash_agreement_scope_sql($conn, $userId, $alias = '')
+{
+    $branchLocation = $GLOBALS['dashboardBranchLocation'] ?? user_branch_location_for_user($conn, $userId);
+    if ($branchLocation === '') {
+        return auth_is_super_admin() ? '1=1' : '1=0';
+    }
+    $prefix = $alias !== '' ? preg_replace('/[^A-Za-z0-9_]/', '', $alias) . '.' : '';
+    return $prefix . "agreement_branch_location = '" . $conn->real_escape_string($branchLocation) . "'";
+}
 
 function dash_count($conn, $sql, $types = '', $params = [])
 {
@@ -137,7 +150,8 @@ $stoneRows = dash_rows($conn, "SELECT COALESCE(NULLIF(stone_name, ''), 'Not spec
 $colourRows = dash_rows($conn, "SELECT COALESCE(NULLIF(color, ''), 'Not specified') AS label, COUNT(*) AS total FROM sm_form_data WHERE {$branchScopeSql} GROUP BY COALESCE(NULLIF(color, ''), 'Not specified') ORDER BY total DESC LIMIT 7");
 $recentRows = dash_rows($conn, "SELECT certi_no, report_no, `date`, stone_name, stone_wt1 AS stone_wt, color, `type` FROM sm_form_data WHERE {$branchScopeSql} ORDER BY certi_no DESC LIMIT 8");
 
-$agreementScopeSql = auth_is_super_admin() ? '1=1' : user_branch_scope_sql($conn, $userId, 'user_id');
+$agreementScopeSql = dash_agreement_scope_sql($conn, $userId);
+$agreementJoinScopeSql = dash_agreement_scope_sql($conn, $userId, 'a');
 $agreementDateExpr = "DATE(agreement_date)";
 $totalAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql}");
 $todayAgreements = dash_count($conn, "SELECT COUNT(*) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND {$agreementDateExpr} = ?", 's', [$today]);
@@ -150,13 +164,13 @@ $totalTestingCharges = dash_sum($conn, "SELECT COALESCE(SUM(testing_charges), 0)
 $totalDueAmount = dash_sum($conn, "SELECT COALESCE(SUM(due_amount), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}");
 $totalPaidAmount = dash_sum($conn, "SELECT COALESCE(SUM(payment_cash + payment_cheque + payment_neft + payment_card + payment_tds), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}");
 $monthTestingCharges = dash_sum($conn, "SELECT COALESCE(SUM(testing_charges), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql} AND {$agreementDateExpr} BETWEEN ? AND ?", 'ss', [$monthStart, $monthEnd]);
-$bookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters WHERE {$agreementScopeSql}");
-$pendingBookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters WHERE {$agreementScopeSql} AND status = 'booked'");
-$generatedBookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters WHERE {$agreementScopeSql} AND status = 'generated'");
+$bookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters m INNER JOIN sm_stone_agreements a ON a.id = m.agreement_id WHERE {$agreementJoinScopeSql}");
+$pendingBookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters m INNER JOIN sm_stone_agreements a ON a.id = m.agreement_id WHERE {$agreementJoinScopeSql} AND m.status = 'booked'");
+$generatedBookedStones = dash_count($conn, "SELECT COUNT(*) FROM sm_form_masters m INNER JOIN sm_stone_agreements a ON a.id = m.agreement_id WHERE {$agreementJoinScopeSql} AND m.status = 'generated'");
 $statusRows = dash_rows($conn, "SELECT agreement_status AS label, COUNT(*) AS total FROM sm_stone_agreements WHERE {$agreementScopeSql} GROUP BY agreement_status ORDER BY total DESC");
-$bookingStatusRows = dash_rows($conn, "SELECT status AS label, COUNT(*) AS total FROM sm_form_masters WHERE {$agreementScopeSql} GROUP BY status ORDER BY total DESC");
+$bookingStatusRows = dash_rows($conn, "SELECT m.status AS label, COUNT(*) AS total FROM sm_form_masters m INNER JOIN sm_stone_agreements a ON a.id = m.agreement_id WHERE {$agreementJoinScopeSql} GROUP BY m.status ORDER BY total DESC");
 $customerRows = dash_rows($conn, "SELECT COALESCE(NULLIF(customer_name, ''), 'Not specified') AS label, COUNT(*) AS total, COALESCE(SUM(testing_charges), 0) AS amount FROM sm_stone_agreements WHERE {$agreementScopeSql} GROUP BY COALESCE(NULLIF(customer_name, ''), 'Not specified') ORDER BY total DESC, amount DESC LIMIT 7");
-$categoryRows = dash_rows($conn, "SELECT COALESCE(NULLIF(category, ''), 'Not specified') AS label, COUNT(*) AS total, COALESCE(SUM(amount), 0) AS amount FROM sm_stone_agreement_items WHERE {$agreementScopeSql} GROUP BY COALESCE(NULLIF(category, ''), 'Not specified') ORDER BY total DESC, amount DESC LIMIT 8");
+$categoryRows = dash_rows($conn, "SELECT COALESCE(NULLIF(i.category, ''), 'Not specified') AS label, COUNT(*) AS total, COALESCE(SUM(i.amount), 0) AS amount FROM sm_stone_agreement_items i INNER JOIN sm_stone_agreements a ON a.id = i.agreement_id WHERE {$agreementJoinScopeSql} GROUP BY COALESCE(NULLIF(i.category, ''), 'Not specified') ORDER BY total DESC, amount DESC LIMIT 8");
 $paymentRows = [
     ['label' => 'Cash', 'total' => dash_sum($conn, "SELECT COALESCE(SUM(payment_cash), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}")],
     ['label' => 'Cheque', 'total' => dash_sum($conn, "SELECT COALESCE(SUM(payment_cheque), 0) FROM sm_stone_agreements WHERE {$agreementScopeSql}")],
