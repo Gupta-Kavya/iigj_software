@@ -133,17 +133,22 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
     $branchCin = trim((string) ($branchDetails['cin_no'] ?? ''));
     $branchGst = trim((string) ($branchDetails['gst_no'] ?? ''));
     $branchContactParts = [];
-    if ($branchPhone !== '') $branchContactParts[] = $branchPhone;
-    if ($branchEmail !== '') $branchContactParts[] = 'Email: ' . $branchEmail;
-    if ($branchWebsite !== '') $branchContactParts[] = 'Web:- ' . $branchWebsite;
+    if ($branchPhone !== '')
+        $branchContactParts[] = $branchPhone;
+    if ($branchEmail !== '')
+        $branchContactParts[] = 'Email: ' . $branchEmail;
+    if ($branchWebsite !== '')
+        $branchContactParts[] = 'Web:- ' . $branchWebsite;
     $branchLegalParts = [];
-    if ($branchCin !== '') $branchLegalParts[] = 'CIN : ' . $branchCin;
-    if ($branchGst !== '') $branchLegalParts[] = 'GST NO: ' . $branchGst;
+    if ($branchCin !== '')
+        $branchLegalParts[] = 'CIN : ' . $branchCin;
+    if ($branchGst !== '')
+        $branchLegalParts[] = 'GST NO: ' . $branchGst;
     $signatureImage = '';
     if (($agreement['signature_mode'] ?? '') === 'esign' && preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=\r\n]+$/', (string) ($agreement['customer_signature'] ?? ''))) {
         $signatureImage = (string) $agreement['customer_signature'];
     }
-    $bodyClass = trim(($forPdf ? 'pdf ' : '') . ($hideActions ? 'send-copy ' : '') . (count($items) > 7 ? 'long' : ''));
+    $bodyClass = trim('compact-agreement ' . ($forPdf ? 'pdf ' : '') . ($hideActions ? 'send-copy ' : '') . (count($items) > 7 ? 'long' : ''));
     ob_start();
     ?>
     <!DOCTYPE html>
@@ -246,7 +251,7 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     font-size: 13px;
                     margin-top: 5px;
                     width: 100%;
-                    
+
                 }
 
                 .meta td {
@@ -805,11 +810,12 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
 
                 .sheet {
                     background: #fff;
+                    box-sizing: border-box;
                     display: flex;
                     flex-direction: column;
                     margin: 0 auto;
                     max-width: 794px;
-                    <?php echo $forPdf ? 'padding:0;position:static;' : 'min-height:1123px;padding:6px 12px 10px;position:relative;'; ?>
+                    <?php echo $forPdf ? 'padding:0;position:static;' : 'min-height:1100px;padding:6px 12px 10px;position:relative;'; ?>
                 }
 
                 .preview-document .sheet {
@@ -1293,13 +1299,18 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     font-size: 16px
                 }
 
+                .pdf .sheet,
+                .long .sheet {
+                    box-sizing: border-box;
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 1100px
+                }
+
                 .pdf .bottom,
                 .long .bottom {
-                    bottom: auto;
-                    left: auto;
-                    margin-top: 18px;
-                    position: static;
-                    right: auto
+                    margin-top: auto;
+                    position: static
                 }
 
                 .pdf .items,
@@ -1330,20 +1341,19 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     }
 
                     .sheet {
-                        display: block !important;
+                        box-sizing: border-box !important;
+                        display: flex !important;
+                        flex-direction: column !important;
                         max-width: none !important;
-                        min-height: 0 !important;
+                        min-height: 1100px !important;
                         height: auto !important;
                         padding: 0 !important;
                         position: static !important
                     }
 
                     .bottom {
-                        bottom: auto !important;
-                        left: auto !important;
-                        margin-top: 18px !important;
+                        margin-top: auto !important;
                         position: static !important;
-                        right: auto !important
                     }
 
                     .copy {
@@ -1395,6 +1405,7 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     }
 
                     @media print {
+
                         html,
                         body {
                             background: #fff;
@@ -1432,18 +1443,27 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                         }
 
                         .sheet {
-                            display: flex;
-                            flex-direction: column;
+                            box-sizing: border-box;
+                            display: block;
                             max-width: none;
-                            min-height: 280mm;
+                            height: 268mm;
+                            min-height: 0;
                             padding: 0;
+                            position: relative !important;
                             box-shadow: none;
                             width: 100%
                         }
 
+                        .agreement-main {
+                            padding-bottom: 68mm
+                        }
+
                         .bottom {
-                            margin-top: auto;
-                            position: static
+                            bottom: 0;
+                            left: 0;
+                            margin-top: 0;
+                            position: absolute;
+                            right: 0
                         }
 
                         .payment-title td,
@@ -1486,16 +1506,19 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                         }
 
                         .long .sheet {
+                            box-sizing: border-box;
                             display: block;
+                            height: 268mm;
                             min-height: 0;
-                            position: static
+                            position: relative !important
                         }
 
                         .long .bottom {
-                            bottom: auto;
-                            left: auto;
-                            position: static;
-                            right: auto
+                            bottom: 0;
+                            left: 0;
+                            margin-top: 0;
+                            position: absolute;
+                            right: 0
                         }
                     }
 
@@ -1633,7 +1656,18 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                 page-break-inside: avoid
             }
 
-            body:not(.pdf):not(.long) .bottom {
+            .sheet {
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                min-height: 1100px
+            }
+
+            .agreement-main {
+                flex: 0 0 auto
+            }
+
+            .bottom {
                 margin-top: auto;
                 position: static
             }
@@ -1647,13 +1681,20 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                 padding: 0
             }
 
+            .pdf .sheet,
+            .long .sheet,
+            .send-copy .sheet {
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                min-height: 1100px
+            }
+
             .pdf .bottom,
-            .long .bottom {
-                bottom: auto;
-                left: auto;
-                margin-top: 18px;
-                position: static;
-                right: auto
+            .long .bottom,
+            .send-copy .bottom {
+                margin-top: auto;
+                position: static
             }
 
             .meta {
@@ -1963,6 +2004,195 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                 margin-top: 10px;
                 width: 100%
             }
+
+            .compact-agreement {
+                font-size: 11px
+            }
+
+            .compact-agreement .sheet {
+                <?php echo $forPdf ? 'padding:0;' : 'padding:4px 8px 6px;'; ?>
+            }
+
+            .compact-agreement .agreement-copy {
+                font-size: 9px;
+                margin-bottom: 4px
+            }
+
+            .compact-agreement .title .header-title {
+                font-size: 21px;
+                line-height: .9
+            }
+
+            .compact-agreement .address,
+            .compact-agreement .cin {
+                font-size: 11px;
+                line-height: 1.12;
+                margin-top: 3px
+            }
+
+            .compact-agreement .meta {
+                border-top-width: 1.5px;
+                margin-top: 4px
+            }
+
+            .compact-agreement .meta td {
+                font-size: 12.5px;
+                line-height: 1.08;
+                padding: 1px 0
+            }
+
+            .compact-agreement .intro-table {
+                margin-top: 12px
+            }
+
+            .compact-agreement .intro-table td,
+            .compact-agreement .party,
+            .compact-agreement .party td,
+            .compact-agreement .status-check-table td {
+                font-size: 11px;
+                line-height: 1.12
+            }
+
+            .compact-agreement .party {
+                margin-top: 5px
+            }
+
+            .compact-agreement .party td {
+                padding: 1px 0
+            }
+
+            .compact-agreement .checkbox,
+            .compact-agreement .status-check-table .checkbox {
+                height: 24px;
+                line-height: 20px;
+                width: 26px
+            }
+
+            .compact-agreement .items {
+                margin-top: 6px
+            }
+
+            .compact-agreement .items th {
+                font-size: 9px !important;
+                line-height: 1.05;
+                padding: 2px 1px
+            }
+
+            .compact-agreement .items td {
+                font-size: 8px;
+                line-height: 1.08;
+                padding: 1.5px 1px
+            }
+
+            .compact-agreement .items .ref,
+            .compact-agreement .items .category,
+            .compact-agreement .items .particulars {
+                font-size: 8px;
+                line-height: 1.08
+            }
+
+            .compact-agreement .cancelled-badge {
+                font-size: 6.5px;
+                margin-top: 1px;
+                padding: 0 2px
+            }
+
+            .compact-agreement .bottom {
+                margin-top: auto;
+                padding-top: 8px
+            }
+
+            .compact-agreement .summary-table {
+                margin-bottom: 2px
+            }
+
+            .compact-agreement .summary-table td,
+            .compact-agreement .pay-table th,
+            .compact-agreement .pay-table td,
+            .compact-agreement .cheque-invoice td,
+            .compact-agreement .pay-right {
+                font-size: 10px;
+                line-height: 1.08;
+                padding: 1.5px 2px
+            }
+
+            .compact-agreement .summary-table .charges-value {
+                font-size: 11px
+            }
+
+            .compact-agreement .pay-table th,
+            .compact-agreement .pay-table td {
+                height: 18px
+            }
+
+            .compact-agreement .cheque-invoice {
+                border-spacing: 0 3px
+            }
+
+            .compact-agreement .cheque-invoice td {
+                height: 20px
+            }
+
+            .compact-agreement .signs {
+                margin-top: 14px
+            }
+
+            .compact-agreement .signs td {
+                font-size: 11px
+            }
+
+            .compact-agreement .sign-line {
+                margin-bottom: 4px;
+                width: 190px
+            }
+
+            .compact-agreement .sign-label {
+                font-size: 13px
+            }
+
+            .compact-agreement .for-iigj,
+            .compact-agreement .for-iigj strong {
+                font-size: 12px
+            }
+
+            .compact-agreement .docno {
+                font-size: 9px;
+                margin-top: 4px
+            }
+
+            @media print {
+                .compact-agreement .items th {
+                    border-bottom-width: 1px !important;
+                    border-top-width: 1px !important
+                }
+
+                .compact-agreement .items td {
+                    border-bottom-width: 1px !important;
+                    border-left-width: 1px !important
+                }
+
+                .compact-agreement .sheet {
+                    box-sizing: border-box !important;
+                    display: block !important;
+                    height: 268mm !important;
+                    min-height: 0 !important;
+                    overflow: visible !important;
+                    position: relative !important
+                }
+
+                .compact-agreement .agreement-main {
+                    padding-bottom: 68mm !important
+                }
+
+                .compact-agreement .bottom {
+                    bottom: 0 !important;
+                    left: 0 !important;
+                    margin-top: 0 !important;
+                    padding-top: 0 !important;
+                    position: absolute !important;
+                    right: 0 !important
+                }
+            }
         </style>
     </head>
 
@@ -1974,7 +2204,8 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                         <span class="preview-mark">SS</span>
                         <div>
                             <div class="preview-title">Agreement Preview</div>
-                            <div class="preview-subtitle"><?php echo agreement_h(agreement_exact_no($agreement)); ?> · Customer copy</div>
+                            <div class="preview-subtitle"><?php echo agreement_h(agreement_exact_no($agreement)); ?> · Customer
+                                copy</div>
                         </div>
                     </div>
                     <div class="preview-tools" aria-label="Preview controls">
@@ -1986,7 +2217,8 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                     <div class="actions">
                         <a href="agreement.php">Agreement Form</a>
                         <a href="agreement-labels-print.php?id=<?php echo (int) $agreement['id']; ?>">Labels</a>
-                        <button type="button" id="send_whatsapp" data-id="<?php echo (int) $agreement['id']; ?>">Send WhatsApp</button>
+                        <button type="button" id="send_whatsapp" data-id="<?php echo (int) $agreement['id']; ?>">Send
+                            WhatsApp</button>
                         <button type="button" class="primary-action" onclick="window.print()">Print</button>
                     </div>
                 </header>
@@ -2019,262 +2251,301 @@ function agreement_exact_html($agreement, $items, $forPdf = false, $hideActions 
                                 <td>Rs. <?php echo agreement_h(agreement_money($totalCharges)); ?></td>
                             </tr>
                         </table>
-                        <div class="preview-note">This is only the preview area. Printing keeps the exact A4 agreement format.</div>
+                        <div class="preview-note">This is only the preview area. Printing keeps the exact A4 agreement format.
+                        </div>
                     </aside>
                     <section class="preview-document" aria-label="Agreement document preview">
                         <div class="preview-page-wrap" id="preview_page_wrap">
-        <?php endif; ?>
-        <div class="sheet">
-            <div class="agreement-copy">CUSTOMER COPY</div>
-            <table class="head-table">
-                <tr>
-                    <td class="logo-left">
-                        <?php if ($leftLogo): ?><img src="<?php echo agreement_h($leftLogo); ?>" alt="GJEPC"><?php endif; ?>
-                    </td>
-                    <td class="title">
-                        <h1 class="header-title">Agreement Cum<br>Acknowledgement Receipt</h1>
-                    </td>
-                    <td class="logo-right">
-                        <?php if ($rightLogo): ?><img src="<?php echo agreement_h($rightLogo); ?>"
-                                alt="IIGJ"><?php endif; ?>
-                    </td>
-                </tr>
-            </table>
-            <div class="addr"><?php echo agreement_h($branchAddress); ?><?php if ($branchContactParts): ?><br><?php echo agreement_h(implode(' | ', $branchContactParts)); ?><?php endif; ?></div>
-            <?php if ($branchLegalParts): ?><div class="cin"><?php echo agreement_h(implode(' | ', $branchLegalParts)); ?></div><?php endif; ?>
-            <table class="meta">
-                <colgroup>
-                    <col style="width:15%">
-                    <col style="width:45%">
-                    <col style="width:7%">
-                    <col style="width:13%">
-                    <col style="width:7%">
-                    <col style="width:13%">
-                </colgroup>
-                <tr>
-                    <td class="meta-agreement-label date-label">Agreement No.</td>
-                    <td class="meta-agreement-value"><?php echo agreement_h(agreement_exact_no($agreement)); ?></td>
-                    <td class="meta-date-label date-label">Date:-</td>
-                    <td class="meta-date-value"><?php echo agreement_h($dateText); ?></td>
-                    <td class="meta-time-label date-label">Time:-</td>
-                    <td class="meta-time-value"><?php echo agreement_h($timeText); ?></td>
-                </tr>
-            </table>
-            <table class="intro-table">
-                <tr>
-                    <td>I/We hereby agree that any gem material or other goods (here in after called simple 'the goods')
-                        hereafter deposited by me/us on my/our behalf with the IIGL RLC shall be deemed to have been upon
-                        the acceptance of terms and conditions overleaf:</td>
-                </tr>
-            </table>
-            <table class="party">
-                <colgroup>
-                    <col style="width:135px">
-                    <col style="width:330px">
-                    <col style="width:108px">
-                    <col style="width:155px">
-                </colgroup>
-                <tr>
-                    <td class="label">Name</td>
-                    <td class="left-value value wrap"><?php echo agreement_wrap_text($agreement['customer_name'], 34); ?>
-                    </td>
-                    <td class="right-label">Del. Dt.&amp; Time</td>
-                    <td class="right-value value wrap"><?php echo agreement_wrap_text($deliveryText, 20); ?></td>
-                </tr>
-                <tr>
-                    <td class="label">Name of Depositor</td>
-                    <td class="left-value value wrap"><?php echo agreement_wrap_text($agreement['depositor_name'], 34); ?>
-                    </td>
-                    <td class="right-label">ID Proof.</td>
-                    <td class="right-value value wrap"><?php echo agreement_wrap_text($agreement['id_no'] ?? '', 18); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="label"></td>
-                    <td class="left-value value wrap address-cell" rowspan="2">
-                        <?php echo agreement_wrap_text($agreement['address'], 40); ?></td>
-                    <td class="check-row status-check-cell" colspan="2">
-                        <table class="status-check-table">
-                            <colgroup>
-                                <col style="width:108px">
-                                <col style="width:34px">
-                                <col style="width:70px">
-                                <col style="width:34px">
-                            </colgroup>
-                            <tr>
-                                <td class="boxlabel status-label">Urgent</td>
-                                <td class="status-box"><span
-                                        class="checkbox <?php echo ($agreement['category'] ?? '') === 'Urgent' ? 'checked' : ''; ?>"><?php echo ($agreement['category'] ?? '') === 'Urgent' ? '&#10003;' : ''; ?></span>
-                                </td>
-                                <td class="boxlabel status-label wide-label">Regular</td>
-                                <td class="status-box"><span
-                                        class="checkbox <?php echo ($agreement['category'] ?? '') !== 'Urgent' ? 'checked' : ''; ?>"><?php echo ($agreement['category'] ?? '') !== 'Urgent' ? '&#10003;' : ''; ?></span>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td class="check-row status-check-cell" colspan="2">
-                        <table class="status-check-table">
-                            <colgroup>
-                                <col style="width:108px">
-                                <col style="width:34px">
-                                <col style="width:70px">
-                                <col style="width:34px">
-                            </colgroup>
-                            <tr>
-                                <td class="boxlabel status-label">Member</td>
-                                <td class="status-box"><span
-                                        class="checkbox <?php echo $agreement['member_status'] === 'Member' ? 'checked' : ''; ?>"><?php echo $agreement['member_status'] === 'Member' ? '&#10003;' : ''; ?></span>
-                                </td>
-                                <td class="boxlabel status-label wide-label">MOU/CDC</td>
-                                <td class="status-box"><span
-                                        class="checkbox <?php echo trim((string) $agreement['mou_cdc']) !== '' ? 'checked' : ''; ?>"><?php echo trim((string) $agreement['mou_cdc']) !== '' ? '&#10003;' : ''; ?></span>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="label">Mobile No.</td>
-                    <td class="left-value wrap"><?php echo agreement_wrap_text($agreement['mobile_no'], 32); ?></td>
-                    <td class="right-label"></td>
-                    <td class="right-value"></td>
-                </tr>
-                <tr>
-                    <td class="label">GST No.</td>
-                    <td class="left-value wrap"><?php echo agreement_wrap_text($agreement['gst_no'], 32); ?></td>
-                    <td class="right-label"></td>
-                    <td class="right-value"></td>
-                </tr>
-            </table>
-            <table class="items">
-                <thead>
-                    <tr>
-                        <th width="5%" style="font-size: 12px;">S.No</th>
-                        <th style="font-size: 12px;">Ref. No.</th>
-                        <th style="font-size: 12px;">Category</th>
-                        <th width="10%" style="font-size: 12px;">Particulars</th>
-                        <th style="font-size: 12px;">Colour</th>
-                        <th style="font-size: 12px;">Gross<br>Weight</th>
-                        <th style="font-size: 12px;">Stone<br>Weight</th>
-                        <th style="font-size: 12px;">Diamond<br>Weight</th>
-                        <th style="font-size: 12px;">Beads<br>Length</th>
-                        <th style="font-size: 12px;">Pcs</th>
-                        <th style="font-size: 12px;">A4/<br>Card</th>
-                        <!-- <th style="font-size: 12px;">Topup<br>(Y/N)</th> -->
-                        <!-- <th style="font-size: 12px;">Discount</th> -->
-                        <th style="font-size: 12px;">Estimated<br>Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($items as $index => $item): ?>
-                        <?php $rowCancelled = strtolower(trim((string) ($item['row_status'] ?? 'active'))) === 'cancelled'; ?>
-                        <tr class="<?php echo $rowCancelled ? 'cancelled-row' : ''; ?>">
-                            <td><?php echo $index + 1; ?></td>
-                            <td class="ref wrap"><?php echo agreement_wrap_text($item['ref_no'] ?? '', 22); ?></td>
-                            <td class="category wrap"><?php echo agreement_wrap_text($item['category'] ?? '', 24); ?></td>
-                            <td class="particulars wrap"><?php echo agreement_wrap_text($item['particulars'] ?? '', 24); ?></td>
-                            <td class="colour wrap"><?php echo agreement_wrap_text($item['color'] ?? '', 12); ?></td>
-                            <td class="weight wrap">
-                                <?php echo agreement_wrap_text(agreement_weight_display($item['gross_wt'] ?? '', $item['gross_wt_unit'] ?? 'ct'), 12); ?>
-                            </td>
-                            <td class="weight wrap">
-                                <?php echo agreement_wrap_text(agreement_weight_display($item['stone_wt'] ?? '', $item['stone_wt_unit'] ?? 'ct'), 12); ?>
-                            </td>
-                            <td class="diamond wrap">
-                                <?php echo agreement_wrap_text(agreement_weight_display($item['dia_wt'] ?? '', $item['dia_wt_unit'] ?? 'ct'), 12); ?>
-                            </td>
-                            <td class="beads wrap"><?php echo agreement_wrap_text($item['bead_length'] ?? '', 10); ?></td>
-                            <td class="pcs wrap"><?php echo agreement_wrap_text($item['pcs'] ?? '', 8); ?></td>
-                            <td class="card wrap"><?php echo agreement_wrap_text(($item['a4_card'] ?? '') ?: 'A4', 6); ?></td>
-                            <!-- <td class="topup wrap"><?php echo !empty($item['topup']) ? 'Yes' : 'No'; ?></td> -->
-                            <!-- <td class="discount wrap"><?php
-                            $discountAmount = (float) ($item['discount_amount'] ?? 0);
-                            $discountPercent = (float) ($item['discount_percent'] ?? 0);
-                            echo $discountAmount > 0 ? agreement_wrap_text(agreement_money($discountAmount) . ' (' . rtrim(rtrim(number_format($discountPercent, 2, '.', ''), '0'), '.') . '%)', 12) : '';
-                            ?></td> -->
-                            <td class="amount wrap"><?php echo agreement_wrap_text($item['amount'] ?? '', 10); ?><?php echo $rowCancelled ? '<br><span class="cancelled-badge">Cancelled</span>' : ''; ?></td>
-                        </tr><?php endforeach; ?>
-                </tbody>
-            </table>
-            <div class="bottom no-break">
-                <div class="bottom-rule"></div>
-                <table class="summary-table">
-                    <tr>
-                        <td class="payment-heading">Payment Details:-</td>
-                        <td class="stone-label">Total Stone Submitted</td>
-                        <td class="stone-value"><?php echo (int) $agreement['pcs_total']; ?></td>
-                        <td class="charges-label">Estimated Total Testing Charges (inclusive tax)</td>
-                        <td class="charges-value">Rs.&nbsp;<?php echo agreement_h(agreement_money($totalCharges)); ?></td>
-                    </tr>
-                    <tr>
-                        <td class="words-label">Amount in Words</td>
-                        <td class="words-value" colspan="4">
-                            <span class="amount-words"><?php echo agreement_wrap_text($amountWords, 88); ?></span>
-                        </td>
-                    </tr>
-                </table>
-                <table class="pay-layout">
-                    <tr>
-                        <td class="pay-left">
-                            <table class="pay-table">
+                        <?php endif; ?>
+                        <div class="sheet">
+                            <div class="agreement-main">
+                            <div class="agreement-copy">CUSTOMER COPY</div>
+                            <table class="head-table">
                                 <tr>
-                                    <th>Cash</th>
-                                    <th>Cheque</th>
-                                    <th>NEFT/UPI</th>
-                                    <th>Card</th>
-                                    <th>TDS</th>
-                                    <th>Due</th>
-                                    <th>Refund</th>
-                                </tr>
-                                <tr>
-                                    <td><?php echo agreement_h(agreement_money($agreement['payment_cash'])); ?></td>
-                                    <td><?php echo agreement_h(agreement_money($agreement['payment_cheque'])); ?></td>
-                                    <td><?php echo agreement_h(agreement_money($agreement['payment_neft'])); ?></td>
-                                    <td><?php echo agreement_h(agreement_money($agreement['payment_card'])); ?></td>
-                                    <td><?php echo agreement_h(agreement_money($agreement['payment_tds'])); ?></td>
-                                    <td><?php echo agreement_h(agreement_money($agreement['due_amount'])); ?></td>
-                                    <td><?php echo agreement_h(agreement_money($agreement['refund_amount'])); ?></td>
-                                </tr>
-                            </table>
-                            <table class="cheque-invoice">
-                                <tr>
-                                    <td style="width:180px">Cheque No.</td>
-                                    <td class="wrap"><?php echo agreement_wrap_text($agreement['cheque_no'], 32); ?></td>
-                                </tr>
-                                <tr>
-                                    <td class="invoice-box" colspan="2">INVOICE NO&nbsp;&nbsp;&nbsp;&nbsp;
-                                        ..............................<div class="office">For Office Use</div>
+                                    <td class="logo-left">
+                                        <?php if ($leftLogo): ?><img src="<?php echo agreement_h($leftLogo); ?>"
+                                                alt="GJEPC"><?php endif; ?>
+                                    </td>
+                                    <td class="title">
+                                        <h1 class="header-title">Agreement Cum<br>Acknowledgement Receipt</h1>
+                                    </td>
+                                    <td class="logo-right">
+                                        <?php if ($rightLogo): ?><img src="<?php echo agreement_h($rightLogo); ?>"
+                                                alt="IIGJ"><?php endif; ?>
                                     </td>
                                 </tr>
                             </table>
-                        </td>
-                    </tr>
-                </table>
-                <div class="condition">Sample Condition&nbsp; OK <span class="smallbox"></span> Damage <span
-                        class="smallbox"></span> / ......................</div>
-                <table class="signs">
-                    <tr>
-                        <td class="sign-left">
-                            <?php if ($signatureImage): ?><img class="signature-image"
-                                    src="<?php echo agreement_h($signatureImage); ?>" alt="Customer signature"><?php endif; ?>
-                            <div class="sign-line"></div>
-                            <div class="sign-label">Sign of Depositor</div>
-                        </td>
-                        <td class="sign-right">
-                            <div class="sign-line"></div>
-                            <div class="for-iigj">For&nbsp; <strong>IIGJ RLC</strong></div>
-                        </td>
-                    </tr>
-                </table>
-                <div class="docno">(Doc.No.- IIGJLJ/7.1/F01, Issue Date- July 01, 2025, Issue No.- 01, Amendment No. 00,
-                    Amendment Date-00)</div>
-            </div>
-        </div>
-        <?php if (!$forPdf && !$hideActions): ?>
+                            <div class="addr">
+                                <?php echo agreement_h($branchAddress); ?>    <?php if ($branchContactParts): ?><br><?php echo agreement_h(implode(' | ', $branchContactParts)); ?><?php endif; ?>
+                            </div>
+                            <?php if ($branchLegalParts): ?>
+                                <div class="cin"><?php echo agreement_h(implode(' | ', $branchLegalParts)); ?></div>
+                            <?php endif; ?>
+                            <table class="meta">
+                                <colgroup>
+                                    <col style="width:15%">
+                                    <col style="width:45%">
+                                    <col style="width:7%">
+                                    <col style="width:13%">
+                                    <col style="width:7%">
+                                    <col style="width:13%">
+                                </colgroup>
+                                <tr>
+                                    <td class="meta-agreement-label date-label">Agreement No.</td>
+                                    <td class="meta-agreement-value">
+                                        <?php echo agreement_h(agreement_exact_no($agreement)); ?></td>
+                                    <td class="meta-date-label date-label">Date:-</td>
+                                    <td class="meta-date-value"><?php echo agreement_h($dateText); ?></td>
+                                    <td class="meta-time-label date-label">Time:-</td>
+                                    <td class="meta-time-value"><?php echo agreement_h($timeText); ?></td>
+                                </tr>
+                            </table>
+                            <table class="intro-table">
+                                <tr>
+                                    <td>I/We hereby agree that any gem material or other goods (here in after called simple
+                                        'the goods')
+                                        hereafter deposited by me/us on my/our behalf with the IIGL RLC shall be deemed to
+                                        have been upon
+                                        the acceptance of terms and conditions overleaf:</td>
+                                </tr>
+                            </table>
+                            <table class="party">
+                                <colgroup>
+                                    <col style="width:135px">
+                                    <col style="width:330px">
+                                    <col style="width:108px">
+                                    <col style="width:155px">
+                                </colgroup>
+                                <tr>
+                                    <td class="label">Name</td>
+                                    <td class="left-value value wrap">
+                                        <?php echo agreement_wrap_text($agreement['customer_name'], 34); ?>
+                                    </td>
+                                    <td class="right-label">Del. Dt.&amp; Time</td>
+                                    <td class="right-value value wrap"><?php echo agreement_wrap_text($deliveryText, 20); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Name of Depositor</td>
+                                    <td class="left-value value wrap">
+                                        <?php echo agreement_wrap_text($agreement['depositor_name'], 34); ?>
+                                    </td>
+                                    <td class="right-label">ID Proof.</td>
+                                    <td class="right-value value wrap">
+                                        <?php echo agreement_wrap_text($agreement['id_no'] ?? '', 18); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="label"></td>
+                                    <td class="left-value value wrap address-cell" rowspan="2">
+                                        <?php echo agreement_wrap_text($agreement['address'], 40); ?>
+                                    </td>
+                                    <td class="check-row status-check-cell" colspan="2">
+                                        <table class="status-check-table">
+                                            <colgroup>
+                                                <col style="width:108px">
+                                                <col style="width:34px">
+                                                <col style="width:70px">
+                                                <col style="width:34px">
+                                            </colgroup>
+                                            <tr>
+                                                <td class="boxlabel status-label">Urgent</td>
+                                                <td class="status-box"><span
+                                                        class="checkbox <?php echo ($agreement['category'] ?? '') === 'Urgent' ? 'checked' : ''; ?>"><?php echo ($agreement['category'] ?? '') === 'Urgent' ? '&#10003;' : ''; ?></span>
+                                                </td>
+                                                <td class="boxlabel status-label wide-label">Regular</td>
+                                                <td class="status-box"><span
+                                                        class="checkbox <?php echo ($agreement['category'] ?? '') !== 'Urgent' ? 'checked' : ''; ?>"><?php echo ($agreement['category'] ?? '') !== 'Urgent' ? '&#10003;' : ''; ?></span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td></td>
+                                    <td class="check-row status-check-cell" colspan="2">
+                                        <table class="status-check-table">
+                                            <colgroup>
+                                                <col style="width:108px">
+                                                <col style="width:34px">
+                                                <col style="width:70px">
+                                                <col style="width:34px">
+                                            </colgroup>
+                                            <tr>
+                                                <td class="boxlabel status-label">Member</td>
+                                                <td class="status-box"><span
+                                                        class="checkbox <?php echo $agreement['member_status'] === 'Member' ? 'checked' : ''; ?>"><?php echo $agreement['member_status'] === 'Member' ? '&#10003;' : ''; ?></span>
+                                                </td>
+                                                <td class="boxlabel status-label wide-label">MOU/CDC</td>
+                                                <td class="status-box"><span
+                                                        class="checkbox <?php echo trim((string) $agreement['mou_cdc']) !== '' ? 'checked' : ''; ?>"><?php echo trim((string) $agreement['mou_cdc']) !== '' ? '&#10003;' : ''; ?></span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Mobile No.</td>
+                                    <td class="left-value wrap">
+                                        <?php echo agreement_wrap_text($agreement['mobile_no'], 32); ?></td>
+                                    <td class="right-label"></td>
+                                    <td class="right-value"></td>
+                                </tr>
+                                <tr>
+                                    <td class="label">GST No.</td>
+                                    <td class="left-value wrap"><?php echo agreement_wrap_text($agreement['gst_no'], 32); ?>
+                                    </td>
+                                    <td class="right-label"></td>
+                                    <td class="right-value"></td>
+                                </tr>
+                            </table>
+                            <table class="items">
+                                <thead>
+                                    <tr>
+                                        <th width="5%" style="font-size: 12px;">S.No</th>
+                                        <th style="font-size: 12px;">Ref. No.</th>
+                                        <th style="font-size: 12px;">Category</th>
+                                        <th width="10%" style="font-size: 12px;">Particulars</th>
+                                        <th style="font-size: 12px;">Colour</th>
+                                        <th style="font-size: 12px;">Gross<br>Weight</th>
+                                        <th style="font-size: 12px;">Stone<br>Weight</th>
+                                        <th style="font-size: 12px;">Diamond<br>Weight</th>
+                                        <th style="font-size: 12px;">Beads<br>Length</th>
+                                        <th style="font-size: 12px;">Pcs</th>
+                                        <th style="font-size: 12px;">A4/<br>Card</th>
+                                        <!-- <th style="font-size: 12px;">Topup<br>(Y/N)</th> -->
+                                        <!-- <th style="font-size: 12px;">Discount</th> -->
+                                        <th style="font-size: 12px;">Estimated<br>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($items as $index => $item): ?>
+                                        <?php $rowCancelled = strtolower(trim((string) ($item['row_status'] ?? 'active'))) === 'cancelled'; ?>
+                                        <tr class="<?php echo $rowCancelled ? 'cancelled-row' : ''; ?>">
+                                            <td><?php echo $index + 1; ?></td>
+                                            <td class="ref wrap"><?php echo agreement_wrap_text($item['ref_no'] ?? '', 22); ?>
+                                            </td>
+                                            <td class="category wrap">
+                                                <?php echo agreement_wrap_text(agreement_rate_category_display($GLOBALS['conn'] ?? null, $item['category'] ?? ''), 24); ?></td>
+                                            <td class="particulars wrap">
+                                                <?php echo agreement_wrap_text($item['particulars'] ?? '', 24); ?></td>
+                                            <td class="colour wrap"><?php echo agreement_wrap_text($item['color'] ?? '', 12); ?>
+                                            </td>
+                                            <td class="weight wrap">
+                                                <?php echo agreement_wrap_text(agreement_weight_display($item['gross_wt'] ?? '', $item['gross_wt_unit'] ?? 'ct'), 12); ?>
+                                            </td>
+                                            <td class="weight wrap">
+                                                <?php echo agreement_wrap_text(agreement_weight_display($item['stone_wt'] ?? '', $item['stone_wt_unit'] ?? 'ct'), 12); ?>
+                                            </td>
+                                            <td class="diamond wrap">
+                                                <?php echo agreement_wrap_text(agreement_weight_display($item['dia_wt'] ?? '', $item['dia_wt_unit'] ?? 'ct'), 12); ?>
+                                            </td>
+                                            <td class="beads wrap">
+                                                <?php echo agreement_wrap_text($item['bead_length'] ?? '', 10); ?></td>
+                                            <td class="pcs wrap"><?php echo agreement_wrap_text($item['pcs'] ?? '', 8); ?></td>
+                                            <td class="card wrap">
+                                                <?php echo agreement_wrap_text(($item['a4_card'] ?? '') ?: 'A4', 6); ?></td>
+                                            <!-- <td class="topup wrap"><?php echo !empty($item['topup']) ? 'Yes' : 'No'; ?></td> -->
+                                            <!-- <td class="discount wrap"><?php
+                                            $discountAmount = (float) ($item['discount_amount'] ?? 0);
+                                            $discountPercent = (float) ($item['discount_percent'] ?? 0);
+                                            echo $discountAmount > 0 ? agreement_wrap_text(agreement_money($discountAmount) . ' (' . rtrim(rtrim(number_format($discountPercent, 2, '.', ''), '0'), '.') . '%)', 12) : '';
+                                            ?></td> -->
+                                            <td class="amount wrap">
+                                                <?php echo agreement_wrap_text($item['amount'] ?? '', 10); ?>        <?php echo $rowCancelled ? '<br><span class="cancelled-badge">Cancelled</span>' : ''; ?>
+                                            </td>
+                                        </tr><?php endforeach; ?>
+                                </tbody>
+                            </table>
+                            </div>
+                            <div class="bottom no-break">
+                                <!-- <div class="bottom-rule"></div> -->
+                                <table class="summary-table">
+                                    <tr>
+                                        <td class="payment-heading">Payment Details:-</td>
+                                        <td class="stone-label">Total Stone Submitted</td>
+                                        <td class="stone-value"><?php echo (int) $agreement['pcs_total']; ?></td>
+                                        <td class="charges-label">Estimated Total Testing Charges (inclusive tax)</td>
+                                        <td class="charges-value">
+                                            Rs.&nbsp;<?php echo agreement_h(agreement_money($totalCharges)); ?></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="words-label">Amount in Words</td>
+                                        <td class="words-value" colspan="4">
+                                            <span
+                                                class="amount-words"><?php echo agreement_wrap_text($amountWords, 88); ?></span>
+                                        </td>
+                                    </tr>
+                                </table>
+                                <table class="pay-layout">
+                                    <tr>
+                                        <td class="pay-left">
+                                            <table class="pay-table">
+                                                <tr>
+                                                    <th>Cash</th>
+                                                    <th>Cheque</th>
+                                                    <th>NEFT/UPI</th>
+                                                    <th>Card</th>
+                                                    <th>TDS</th>
+                                                    <th>Due</th>
+                                                    <th>Refund</th>
+                                                </tr>
+                                                <tr>
+                                                    <td><?php echo agreement_h(agreement_money($agreement['payment_cash'])); ?>
+                                                    </td>
+                                                    <td><?php echo agreement_h(agreement_money($agreement['payment_cheque'])); ?>
+                                                    </td>
+                                                    <td><?php echo agreement_h(agreement_money($agreement['payment_neft'])); ?>
+                                                    </td>
+                                                    <td><?php echo agreement_h(agreement_money($agreement['payment_card'])); ?>
+                                                    </td>
+                                                    <td><?php echo agreement_h(agreement_money($agreement['payment_tds'])); ?>
+                                                    </td>
+                                                    <td><?php echo agreement_h(agreement_money($agreement['due_amount'])); ?>
+                                                    </td>
+                                                    <td><?php echo agreement_h(agreement_money($agreement['refund_amount'])); ?>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                            <table class="cheque-invoice">
+                                                <tr>
+                                                    <td style="width:180px">Cheque No.</td>
+                                                    <td class="wrap">
+                                                        <?php echo agreement_wrap_text($agreement['cheque_no'], 32); ?></td>
+                                                </tr>
+                                                <tr>
+                                                    <td class="invoice-box" colspan="2">INVOICE NO&nbsp;&nbsp;&nbsp;&nbsp;
+                                                        ..............................<div class="office">For Office Use
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                                <div class="condition">Sample Condition&nbsp; OK <span class="smallbox"></span> Damage <span
+                                        class="smallbox"></span> / ......................</div>
+                                <table class="signs">
+                                    <tr>
+                                        <td class="sign-left">
+                                            <?php if ($signatureImage): ?><img class="signature-image"
+                                                    src="<?php echo agreement_h($signatureImage); ?>"
+                                                    alt="Customer signature"><?php endif; ?>
+                                            <div class="sign-line"></div>
+                                            <div class="sign-label">Sign of Depositor</div>
+                                        </td>
+                                        <td class="sign-right">
+                                            <div class="sign-line"></div>
+                                            <div class="for-iigj">For&nbsp; <strong>IIGJ RLC</strong></div>
+                                        </td>
+                                    </tr>
+                                </table>
+                                <div class="docno">(Doc.No.- IIGJLJ/7.1/F01, Issue Date- July 01, 2025, Issue No.- 01,
+                                    Amendment No. 00,
+                                    Amendment Date-00)</div>
+                            </div>
+                        </div>
+                        <?php if (!$forPdf && !$hideActions): ?>
                         </div>
                     </section>
                 </main>

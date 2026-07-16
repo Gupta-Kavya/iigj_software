@@ -136,11 +136,14 @@ function auth_allowed_ip_status($conn, $branchLocation = '', $role = '')
     $refs = [$types];
     foreach ($scopes as $key => &$scope) $refs[] = &$scope;
     call_user_func_array([$stmt, 'bind_param'], $refs);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    while ($row = $result->fetch_assoc()) {
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return ['allowed' => false, 'ip' => $clientIp, 'message' => 'Unable to verify allowed IP address.'];
+    }
+    $stmt->bind_result($rowBranchLocation, $rowIpPattern, $rowLabel);
+    while ($stmt->fetch()) {
         foreach ($clientIps as $candidateIp) {
-            if (auth_ip_pattern_matches($candidateIp, $row['ip_pattern'] ?? '')) {
+            if (auth_ip_pattern_matches($candidateIp, $rowIpPattern ?? '')) {
                 $stmt->close();
                 return ['allowed' => true, 'ip' => $clientIp, 'matched_ip' => $candidateIp, 'message' => 'Allowed IP matched.'];
             }
@@ -175,8 +178,16 @@ function auth_enforce_allowed_ip($conn)
         if ($stmt) {
             $userId = auth_current_user_id();
             $stmt->bind_param('i', $userId);
-            $stmt->execute();
-            $row = $stmt->get_result()->fetch_assoc();
+            $row = null;
+            if ($stmt->execute()) {
+                $stmt->bind_result($rowBranchLocation, $rowRole);
+                if ($stmt->fetch()) {
+                    $row = [
+                        'branch_location' => $rowBranchLocation,
+                        'role' => $rowRole,
+                    ];
+                }
+            }
             $stmt->close();
             if ($row) {
                 $_SESSION['branch_location'] = (string) ($row['branch_location'] ?? '');

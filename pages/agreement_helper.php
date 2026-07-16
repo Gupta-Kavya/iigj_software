@@ -27,6 +27,45 @@ function agreement_add_index_if_missing($conn, $table, $index, $definition)
     return (bool) @$conn->query("ALTER TABLE `{$table}` ADD INDEX `{$index}` {$definition}");
 }
 
+function agreement_rate_category_display($conn, $value)
+{
+    static $cache = [];
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    $key = mb_strtolower($value);
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+
+    $display = $value;
+    if (!$conn && isset($GLOBALS['conn'])) {
+        $conn = $GLOBALS['conn'];
+    }
+    if (!$conn || !method_exists($conn, 'prepare')) {
+        $cache[$key] = $display;
+        return $display;
+    }
+
+    $stmt = @$conn->prepare("SELECT category FROM sm_rate_master WHERE description = ? OR category = ? ORDER BY CASE WHEN description = ? THEN 0 ELSE 1 END, id ASC LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param('sss', $value, $value, $value);
+        if ($stmt->execute()) {
+            $row = $stmt->get_result()->fetch_assoc();
+            $category = trim((string) ($row['category'] ?? ''));
+            if ($category !== '') {
+                $display = $category;
+            }
+        }
+        $stmt->close();
+    }
+
+    $cache[$key] = $display;
+    return $display;
+}
+
 function agreement_table_ready($conn)
 {
     $ready = (bool) @$conn->query("CREATE TABLE IF NOT EXISTS `sm_stone_agreements` (

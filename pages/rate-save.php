@@ -19,7 +19,10 @@ if (!rate_master_table_ready($conn)) {
 }
 
 $description = rate_master_clean($_POST['description'] ?? '', 255);
-$category = '';
+$category = rate_master_clean($_POST['category'] ?? '', 180);
+if ($category === '') {
+    $category = rate_master_clean($description, 180);
+}
 $rateMember = rate_master_number($_POST['rate_member'] ?? 0);
 $rateNonMember = rate_master_number($_POST['rate_non_member'] ?? 0);
 $cdc = strtoupper(trim((string) ($_POST['cdc'] ?? ''))) === 'Y' ? 'Y' : 'N';

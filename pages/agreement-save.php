@@ -161,10 +161,17 @@ $rawItems = isset($_POST['items']) && is_array($_POST['items']) ? $_POST['items'
 $items = [];
 $pcsTotal = 0;
 $rateMap = [];
-$rateResult = $conn->query('SELECT rate_code, description, rate_member, rate_non_member, cdc FROM sm_rate_master');
+$rateResult = $conn->query('SELECT rate_code, category, description, rate_member, rate_non_member, cdc FROM sm_rate_master');
 if ($rateResult) {
     while ($rateRow = $rateResult->fetch_assoc()) {
-        $rateMap[trim((string) ($rateRow['description'] ?? ''))] = $rateRow;
+        $categoryKey = trim((string) ($rateRow['category'] ?? ''));
+        $descriptionKey = trim((string) ($rateRow['description'] ?? ''));
+        if ($categoryKey !== '' && !isset($rateMap[$categoryKey])) {
+            $rateMap[$categoryKey] = $rateRow;
+        }
+        if ($descriptionKey !== '' && !isset($rateMap[$descriptionKey])) {
+            $rateMap[$descriptionKey] = $rateRow;
+        }
     }
 }
 $locationName = user_branch_location_for_user($conn, $userId);

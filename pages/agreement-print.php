@@ -522,7 +522,7 @@ function agreement_print_html($agreement, $items, $forPdf = false)
                             <tr>
                                 <td class="center"><?php echo $index + 1; ?></td>
                                 <td><?php echo agreement_h($item['ref_no'] ?? ''); ?></td>
-                                <td><?php echo agreement_h($item['category'] ?? ''); ?></td>
+                                <td><?php echo agreement_h(agreement_rate_category_display($conn, $item['category'] ?? '')); ?></td>
                                 <td><?php echo agreement_h($item['particulars'] ?? ''); ?></td>
                                 <td><?php echo agreement_h($item['color'] ?? ''); ?></td>
                                 <td class="num"><?php echo agreement_h(agreement_weight_display($item['gross_wt'] ?? '', $item['gross_wt_unit'] ?? 'ct')); ?></td>

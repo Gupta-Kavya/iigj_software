@@ -509,11 +509,20 @@ include "assets/navbar.php";
                         agreement <strong id="saved_agreement_no"></strong>.</span><a id="saved_agreement_print"
                         href="#" target="_blank">Open print view</a></div>
                 <div class="agreement-edit-bar">
-                    <div><label for="edit_agreement_lookup">Edit Agreement No.</label><input class="form-control" id="edit_agreement_lookup" inputmode="numeric" placeholder="Enter agreement no"></div>
-                    <button type="button" class="btn btn-default" id="load_agreement_edit"><i class="fa fa-pencil"></i> Load Edit</button>
-                    <div><label for="agreement_status_select">Agreement Status</label><select class="form-control" id="agreement_status_select" disabled><?php foreach (agreement_status_options() as $statusCode => $statusLabel): ?><option value="<?php echo agreement_h($statusCode); ?>"><?php echo agreement_h($statusLabel); ?></option><?php endforeach; ?></select></div>
-                    <button type="button" class="btn btn-default" id="update_agreement_status" disabled><i class="fa fa-whatsapp"></i> Update Status</button>
-                    <div class="agreement-edit-note" id="agreement_edit_note">Load an old agreement here to update it.</div>
+                    <div><label for="edit_agreement_lookup">Edit Agreement No.</label><input class="form-control"
+                            id="edit_agreement_lookup" inputmode="numeric" placeholder="Enter agreement no"></div>
+                    <button type="button" class="btn btn-default" id="load_agreement_edit"><i class="fa fa-pencil"></i>
+                        Load Edit</button>
+                    <div><label for="agreement_status_select">Agreement Status</label><select class="form-control"
+                            id="agreement_status_select"
+                            disabled><?php foreach (agreement_status_options() as $statusCode => $statusLabel): ?>
+                                <option value="<?php echo agreement_h($statusCode); ?>">
+                                    <?php echo agreement_h($statusLabel); ?></option><?php endforeach; ?>
+                        </select></div>
+                    <button type="button" class="btn btn-default" id="update_agreement_status" disabled><i
+                            class="fa fa-whatsapp"></i> Update Status</button>
+                    <div class="agreement-edit-note" id="agreement_edit_note">Load an old agreement here to update it.
+                    </div>
                 </div>
                 <form id="agreement_form" autocomplete="off" data-agreement-no="<?php echo (int) $nextAgreementNo; ?>"
                     data-next-certi-no="<?php echo (int) $nextCertificateNo; ?>"
@@ -532,8 +541,10 @@ include "assets/navbar.php";
                                         value="<?php echo (int) $nextAgreementNo; ?>" readonly></div>
                                 <div class="agreement-field"><label for="docket_no">Docket No.</label><input
                                         class="form-control" name="docket_no" id="docket_no"></div>
-                                <div class="agreement-field"><label for="collection_center_id">Collection Center</label><select
-                                        class="form-control" name="collection_center_id" id="collection_center_id"><?php echo user_collection_center_options($conn, $userId, (int) ($defaultCollectionCenter['id'] ?? 0)); ?></select></div>
+                                <div class="agreement-field"><label for="collection_center_id">Collection
+                                        Center</label><select class="form-control" name="collection_center_id"
+                                        id="collection_center_id"><?php echo user_collection_center_options($conn, $userId, (int) ($defaultCollectionCenter['id'] ?? 0)); ?></select>
+                                </div>
                                 <div class="agreement-field"><label for="agreement_date">Date</label><input
                                         class="form-control" type="date" name="agreement_date" id="agreement_date"
                                         value="<?php echo agreement_h($today); ?>"></div>
@@ -541,8 +552,12 @@ include "assets/navbar.php";
                                         class="form-control" type="time" name="agreement_time" id="agreement_time"
                                         value="<?php echo agreement_h($now); ?>"></div>
                                 <div class="agreement-field span2"><label for="customer_name">Customer Name
-                                        *</label><div class="input-group"><input class="form-control" name="customer_name" id="customer_name"
-                                        autocomplete="off" required><span class="input-group-btn"><button class="btn btn-default" type="button" id="add_customer_button" title="Add customer"><i class="fa fa-plus"></i></button></span></div>
+                                        *</label>
+                                    <div class="input-group"><input class="form-control" name="customer_name"
+                                            id="customer_name" autocomplete="off" required><span
+                                            class="input-group-btn"><button class="btn btn-default" type="button"
+                                                id="add_customer_button" title="Add customer"><i
+                                                    class="fa fa-plus"></i></button></span></div>
                                     <input type="hidden" name="customer_master_id" id="customer_master_id">
                                     <div class="customer-suggest" id="customer_suggest"></div>
                                 </div>
@@ -550,9 +565,10 @@ include "assets/navbar.php";
                                         Depositor</label><input class="form-control" name="depositor_name"
                                         id="depositor_name"></div>
                                 <div class="agreement-field span2 "><label>Membership</label>
-                                    <div class="agreement-checks form-control"><label><input type="radio" name="member_status"
-                                                value="Non Member" checked> Non Member</label><label><input type="radio"
-                                                name="member_status" value="Member"> Member</label></div>
+                                    <div class="agreement-checks form-control"><label><input type="radio"
+                                                name="member_status" value="Non Member" checked> Non
+                                            Member</label><label><input type="radio" name="member_status"
+                                                value="Member"> Member</label></div>
                                 </div>
                                 <div class="agreement-field"><label for="mou_cdc">MOU / CDC</label><select
                                         class="form-control" name="mou_cdc"
@@ -589,9 +605,11 @@ include "assets/navbar.php";
                     <datalist id="rate_category_options"></datalist>
                     <section class="agreement-card">
                         <div class="agreement-card-head">
-                            <h3>Stone Details</h3><div><button type="button" class="btn btn-default btn-sm"
-                                id="add_rate_category_button"><i class="fa fa-tags"></i> Add Category</button> <button type="button" class="btn btn-default btn-sm"
-                                id="add_agreement_row"><i class="fa fa-plus"></i> Add Row</button></div>
+                            <h3>Stone Details</h3>
+                            <div><button type="button" class="btn btn-default btn-sm" id="add_rate_category_button"><i
+                                        class="fa fa-tags"></i> Add Category</button> <button type="button"
+                                    class="btn btn-default btn-sm" id="add_agreement_row"><i class="fa fa-plus"></i> Add
+                                    Row</button></div>
                         </div>
                         <div class="agreement-table-wrap">
                             <table class="table table-bordered agreement-items">
@@ -695,26 +713,40 @@ include "assets/navbar.php";
                 </div>
                 <div class="modal-body">
                     <div class="row">
-                        <div class="col-sm-6 form-group"><label>Customer Name *</label><input class="form-control" name="customer_name" id="new_customer_name" required></div>
-                        <div class="col-sm-6 form-group"><label>Name of Depositor</label><input class="form-control" name="depositor_name" id="new_depositor_name"></div>
-                        <div class="col-sm-6 form-group"><label>Mobile No.</label><input class="form-control" name="mobile_no" id="new_mobile_no"></div>
-                        <div class="col-sm-6 form-group"><label>Email</label><input class="form-control" type="email" name="email" id="new_email"></div>
-                        <div class="col-sm-6 form-group"><label>GST No.</label><input class="form-control" name="gst_no" id="new_gst_no"></div>
-                        <div class="col-sm-6 form-group"><label>Govt ID No.</label><input class="form-control" name="id_no" id="new_id_no"></div>
-                        <div class="col-sm-6 form-group"><label>Membership</label><select class="form-control" name="member_status" id="new_member_status"><option value="Non Member">Non Member</option><option value="Member">Member</option></select></div>
-                        <div class="col-sm-6 form-group"><label>MOU / CDC</label><select class="form-control" name="mou_cdc" id="new_mou_cdc"><?php echo agreement_mou_options(''); ?></select></div>
-                        <div class="col-sm-12 form-group"><label>Address</label><textarea class="form-control" name="address" id="new_address" rows="3"></textarea></div>
+                        <div class="col-sm-6 form-group"><label>Customer Name *</label><input class="form-control"
+                                name="customer_name" id="new_customer_name" required></div>
+                        <div class="col-sm-6 form-group"><label>Name of Depositor</label><input class="form-control"
+                                name="depositor_name" id="new_depositor_name"></div>
+                        <div class="col-sm-6 form-group"><label>Mobile No.</label><input class="form-control"
+                                name="mobile_no" id="new_mobile_no"></div>
+                        <div class="col-sm-6 form-group"><label>Email</label><input class="form-control" type="email"
+                                name="email" id="new_email"></div>
+                        <div class="col-sm-6 form-group"><label>GST No.</label><input class="form-control" name="gst_no"
+                                id="new_gst_no"></div>
+                        <div class="col-sm-6 form-group"><label>Govt ID No.</label><input class="form-control"
+                                name="id_no" id="new_id_no"></div>
+                        <div class="col-sm-6 form-group"><label>Membership</label><select class="form-control"
+                                name="member_status" id="new_member_status">
+                                <option value="Non Member">Non Member</option>
+                                <option value="Member">Member</option>
+                            </select></div>
+                        <div class="col-sm-6 form-group"><label>MOU / CDC</label><select class="form-control"
+                                name="mou_cdc" id="new_mou_cdc"><?php echo agreement_mou_options(''); ?></select></div>
+                        <div class="col-sm-12 form-group"><label>Address</label><textarea class="form-control"
+                                name="address" id="new_address" rows="3"></textarea></div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="customer_add_submit"><i class="fa fa-save"></i> Save Customer</button>
+                    <button type="submit" class="btn btn-primary" id="customer_add_submit"><i class="fa fa-save"></i>
+                        Save Customer</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
-<div class="modal modern-modal" id="rate_category_modal" tabindex="-1" role="dialog" aria-labelledby="rateCategoryTitle">
+<div class="modal modern-modal" id="rate_category_modal" tabindex="-1" role="dialog"
+    aria-labelledby="rateCategoryTitle">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <form id="rate_category_form">
@@ -724,16 +756,24 @@ include "assets/navbar.php";
                 </div>
                 <div class="modal-body">
                     <div class="row">
-                        <div class="col-sm-12 form-group"><label>Category Name *</label><input class="form-control" name="description" id="new_rate_description" maxlength="255" required></div>
-                        <div class="col-sm-4 form-group"><label>Member Rate</label><input class="form-control" name="rate_member" id="new_rate_member" inputmode="decimal" value="0"></div>
-                        <div class="col-sm-4 form-group"><label>Non-Member Rate</label><input class="form-control" name="rate_non_member" id="new_rate_non_member" inputmode="decimal" value="0"></div>
-                        <div class="col-sm-4 form-group"><label>CDC Discount</label><div class="form-control agreement-checks"><label><input type="checkbox" name="cdc" id="new_rate_cdc" value="Y"> Yes</label></div></div>
-                        <div class="col-sm-12 form-group"><label>Remark</label><input class="form-control" name="remark" id="new_rate_remark" maxlength="255"></div>
+                        <div class="col-sm-12 form-group"><label>Category Name *</label><input class="form-control"
+                                name="description" id="new_rate_description" maxlength="255" required></div>
+                        <div class="col-sm-4 form-group"><label>Member Rate</label><input class="form-control"
+                                name="rate_member" id="new_rate_member" inputmode="decimal" value="0"></div>
+                        <div class="col-sm-4 form-group"><label>Non-Member Rate</label><input class="form-control"
+                                name="rate_non_member" id="new_rate_non_member" inputmode="decimal" value="0"></div>
+                        <div class="col-sm-4 form-group"><label>CDC Discount</label>
+                            <div class="form-control agreement-checks"><label><input type="checkbox" name="cdc"
+                                        id="new_rate_cdc" value="Y"> Yes</label></div>
+                        </div>
+                        <div class="col-sm-12 form-group"><label>Remark</label><input class="form-control" name="remark"
+                                id="new_rate_remark" maxlength="255"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="rate_category_submit"><i class="fa fa-save"></i> Save Category</button>
+                    <button type="submit" class="btn btn-primary" id="rate_category_submit"><i class="fa fa-save"></i>
+                        Save Category</button>
                 </div>
             </form>
         </div>

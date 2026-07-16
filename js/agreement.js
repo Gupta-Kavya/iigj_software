@@ -228,6 +228,9 @@
         $("input[name='signature_mode'][value='" + (agreement.signature_mode === "esign" ? "esign" : "manual") + "']").prop("checked", true);
         clearSignaturePad();
         refreshSignatureMode();
+        if (agreement.signature_mode === "esign" && agreement.customer_signature) {
+            loadSignatureImage(agreement.customer_signature);
+        }
         (agreement.items || []).forEach(function (item) {
             populateAgreementRow(addRow(false), item);
         });
@@ -1002,6 +1005,35 @@
         signatureContext.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
         signatureHasInk = false;
         signatureInput.value = "";
+    }
+
+    function loadSignatureImage(dataUrl) {
+        dataUrl = String(dataUrl || "");
+        if (!signatureCanvas || !signatureContext || !/^data:image\/png;base64,/i.test(dataUrl)) {
+            return;
+        }
+        signatureInput.value = dataUrl;
+        signatureHasInk = true;
+        window.setTimeout(function () {
+            resizeSignaturePad();
+            var rect = signatureCanvas.getBoundingClientRect();
+            var image = new Image();
+            image.onload = function () {
+                var ratio = Math.max(window.devicePixelRatio || 1, 1);
+                var naturalWidth = Math.max(1, image.naturalWidth / ratio);
+                var naturalHeight = Math.max(1, image.naturalHeight / ratio);
+                var scale = Math.min(1, rect.width / naturalWidth, rect.height / naturalHeight);
+                var drawWidth = naturalWidth * scale;
+                var drawHeight = naturalHeight * scale;
+                var drawX = Math.max(0, (rect.width - drawWidth) / 2);
+                var drawY = Math.max(0, (rect.height - drawHeight) / 2);
+                signatureContext.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+                signatureContext.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+                signatureHasInk = true;
+                signatureInput.value = dataUrl;
+            };
+            image.src = dataUrl;
+        }, 40);
     }
 
     function signatureToTrimmedImage() {

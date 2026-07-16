@@ -3,6 +3,7 @@ require_once 'auth.php';
 auth_require_login();
 require_once 'db_connect.php';
 require_once 'agreement_helper.php';
+require_once 'customer_helper.php';
 date_default_timezone_set('Asia/Kolkata');
 
 agreement_table_ready($conn);
@@ -51,7 +52,7 @@ if ($fromDate > $toDate) {
     [$fromDate, $toDate] = [$toDate, $fromDate];
 }
 $reportMode = strtolower((string) ($_GET['report_type'] ?? 'summary'));
-$reportMode = in_array($reportMode, ['summary', 'detailed', 'due', 'cancel', 'collection_center', 'daily_log', 'pending_delivery', 'received_vs_generated', 'user_wise'], true) ? $reportMode : 'summary';
+$reportMode = in_array($reportMode, ['summary', 'detailed', 'due', 'cancel', 'collection_center', 'daily_log', 'pending_delivery', 'received_vs_generated', 'user_wise', 'new_customers'], true) ? $reportMode : 'summary';
 
 $userId = auth_current_user_id();
 $branchLocation = user_branch_location_for_user($conn, $userId);
@@ -340,6 +341,38 @@ uasort($userWiseRows, function ($a, $b) {
     return strcasecmp((string) $a['staff'], (string) $b['staff']);
 });
 
+$newCustomerRows = [];
+if (customer_master_table_ready($conn)) {
+    $customerScopeSql = user_branch_scope_sql($conn, $userId, 'c.user_id');
+    $agreementCustomerScopeSql = user_branch_scope_sql($conn, $userId, 'a.user_id');
+    $customerSql = "SELECT c.id, c.customer_name, c.depositor_name, c.address, c.mobile_no, c.email,
+            c.member_status, c.mou_cdc, c.id_no, c.gst_no, c.created_at, c.updated_at,
+            u.full_name AS added_by, u.branch_location
+        FROM sm_customer_master c
+        LEFT JOIN sm_users u ON u.id = c.user_id
+        WHERE (c.user_id = 0 OR {$customerScopeSql})
+            AND c.created_at >= ?
+            AND c.created_at < DATE_ADD(?, INTERVAL 1 DAY)
+            AND NOT EXISTS (
+                SELECT 1
+                FROM sm_stone_agreements a
+                WHERE {$agreementCustomerScopeSql}
+                    AND UPPER(TRIM(a.customer_name)) = UPPER(TRIM(c.customer_name))
+                    AND ABS(TIMESTAMPDIFF(MINUTE, c.created_at, a.created_at)) <= 15
+            )
+        ORDER BY c.created_at ASC, c.customer_name ASC, c.id ASC";
+    $customerStmt = $conn->prepare($customerSql);
+    if ($customerStmt) {
+        $customerStmt->bind_param('ss', $fromDate, $toDate);
+        $customerStmt->execute();
+        $customerResult = $customerStmt->get_result();
+        while ($row = $customerResult->fetch_assoc()) {
+            $newCustomerRows[] = $row;
+        }
+        $customerStmt->close();
+    }
+}
+
 $reportTitles = [
     'summary' => 'Total Collection Report',
     'detailed' => 'Total Collection Report',
@@ -350,6 +383,7 @@ $reportTitles = [
     'pending_delivery' => 'Pending Delivery Report',
     'received_vs_generated' => 'Stone Received vs Report Generated',
     'user_wise' => 'User-Wise Entry Report',
+    'new_customers' => 'New Customers Added Report',
 ];
 
 if (strtolower((string) ($_GET['export'] ?? '')) === 'excel') {
@@ -530,6 +564,26 @@ if (strtolower((string) ($_GET['export'] ?? '')) === 'excel') {
                 agreement_report_money($row['due'] ?? 0),
             ]);
         }
+    } elseif ($reportMode === 'new_customers') {
+        fputcsv($out, ['Added Date', 'Customer', 'Depositor', 'Mobile No.', 'Email', 'Member/Non', 'MOU/CDC', 'GST No.', 'ID No.', 'Added By', 'Branch', 'Address']);
+        foreach ($newCustomerRows as $row) {
+            fputcsv($out, [
+                agreement_report_date($row['created_at'] ?? ''),
+                $row['customer_name'] ?? '',
+                $row['depositor_name'] ?? '',
+                $row['mobile_no'] ?? '',
+                $row['email'] ?? '',
+                $row['member_status'] ?? '',
+                $row['mou_cdc'] ?? '',
+                $row['gst_no'] ?? '',
+                $row['id_no'] ?? '',
+                ($row['added_by'] ?? '') ?: 'Imported/Global',
+                user_branch_location_label($conn, $row['branch_location'] ?? $branchLocation),
+                preg_replace('/\s+/', ' ', trim((string) ($row['address'] ?? ''))),
+            ]);
+        }
+        fputcsv($out, []);
+        fputcsv($out, ['Total New Customers', count($newCustomerRows)]);
     } else {
         fputcsv($out, ['Date', 'Ref.No', 'Category', 'Size', 'Nor/Urgent', 'Gross_wt', 'Stone_wt', 'Dia_Wt', 'Bead-Lnth', 'Pcs', 'Amount', 'Cancel']);
         foreach ($agreements as $agreement) {
@@ -1035,6 +1089,7 @@ $exportUrl = 'agreement-reports.php?' . http_build_query($exportParams);
                     <option value="pending_delivery" <?php echo $reportMode === 'pending_delivery' ? 'selected' : ''; ?>>Pending Delivery Report</option>
                     <option value="received_vs_generated" <?php echo $reportMode === 'received_vs_generated' ? 'selected' : ''; ?>>Stone Received vs Report Generated</option>
                     <option value="user_wise" <?php echo $reportMode === 'user_wise' ? 'selected' : ''; ?>>User-Wise Entry Report</option>
+                    <option value="new_customers" <?php echo $reportMode === 'new_customers' ? 'selected' : ''; ?>>New Customers Added Report</option>
                 </select>
             </div>
             <div>
@@ -1425,6 +1480,46 @@ $exportUrl = 'agreement-reports.php?' . http_build_query($exportParams);
                 </table>
                 <?php if (!$userWiseRows): ?>
                     <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No user-wise entries found in this date range.</div>
+                <?php endif; ?>
+            <?php elseif ($reportMode === 'new_customers'): ?>
+                <table class="report-table compact-report-table">
+                    <thead>
+                        <tr>
+                            <th>Added Date</th>
+                            <th>Customer</th>
+                            <th>Depositor</th>
+                            <th>Mobile No.</th>
+                            <th>Email</th>
+                            <th>Member/Non</th>
+                            <th>MOU/CDC</th>
+                            <th>GST No.</th>
+                            <th>Added By</th>
+                            <th>Branch</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($newCustomerRows as $row): ?>
+                            <tr>
+                                <td><?php echo agreement_report_h(agreement_report_date($row['created_at'] ?? '')); ?></td>
+                                <td><?php echo agreement_report_h($row['customer_name'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['depositor_name'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['mobile_no'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['email'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['member_status'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['mou_cdc'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h($row['gst_no'] ?? ''); ?></td>
+                                <td><?php echo agreement_report_h(($row['added_by'] ?? '') ?: 'Imported/Global'); ?></td>
+                                <td><?php echo agreement_report_h(user_branch_location_label($conn, $row['branch_location'] ?? $branchLocation)); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <tr class="agreement-total">
+                            <td colspan="9" class="num">Total New Customers</td>
+                            <td class="num"><?php echo (int) count($newCustomerRows); ?></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php if (!$newCustomerRows): ?>
+                    <div style="padding:24px;text-align:center;color:#737373;font-size:13px;">No new customers found in this date range.</div>
                 <?php endif; ?>
             <?php else: ?>
                 <table class="report-table detail-table">
